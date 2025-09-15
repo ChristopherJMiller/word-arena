@@ -1,0 +1,16 @@
+[package]
+name = "game-persistence"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sea-orm = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+game-types = { path = "../game-types" }
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+migration = { path = "../migration" }

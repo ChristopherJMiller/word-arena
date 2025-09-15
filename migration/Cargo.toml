@@ -1,0 +1,15 @@
+[package]
+name = "migration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sea-orm-migration = { workspace = true }
+sea-orm = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+[[bin]]
+name = "migration"
+path = "src/main.rs"
