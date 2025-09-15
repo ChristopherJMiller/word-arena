@@ -177,23 +177,35 @@ impl AuthService {
     }
 
     async fn validate_dev_token(&self, token: &str) -> Result<User, AuthError> {
-        // In dev mode, we expect a simple JSON payload instead of a JWT
-        // Format: {"user_id":"123","email":"test@example.com","name":"Test User"}
+        // In dev mode, we expect a JWT-like token but we parse it without validation
+        // We just decode the payload section and extract the claims
         
-        if token.starts_with("{") && token.ends_with("}") {
-            // Parse as JSON
-            #[derive(serde::Deserialize)]
-            struct DevClaims {
-                user_id: String,
-                email: String,
-                name: String,
-            }
-
-            let claims: DevClaims = serde_json::from_str(token)
+        // Check if it looks like a JWT (has 3 parts separated by dots)
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() == 3 {
+            // Decode the payload (second part)
+            let payload_b64 = parts[1];
+            
+            // Add padding if needed for base64 decoding
+            let padded_payload = match payload_b64.len() % 4 {
+                0 => payload_b64.to_string(),
+                n => format!("{}{}", payload_b64, "=".repeat(4 - n)),
+            };
+            
+            // Convert URL-safe base64 back to standard base64
+            let standard_b64 = padded_payload.replace('-', "+").replace('_', "/");
+            
+            // Decode base64
+            let payload_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, standard_b64)
                 .map_err(|_| AuthError::InvalidToken)?;
-
+            
+            // Parse as JSON to get claims
+            let claims: MicrosoftJwtClaims = serde_json::from_slice(&payload_bytes)
+                .map_err(|_| AuthError::InvalidToken)?;
+            
+            // Create user from claims (no validation in dev mode)
             Ok(User {
-                id: uuid::Uuid::parse_str(&claims.user_id)
+                id: uuid::Uuid::parse_str(&claims.sub)
                     .unwrap_or_else(|_| uuid::Uuid::new_v4()),
                 email: claims.email,
                 display_name: claims.name,
@@ -203,21 +215,46 @@ impl AuthService {
                 created_at: chrono::Utc::now().to_string(),
             })
         } else {
-            // Simple string format: "user_id:email:name"
-            let parts: Vec<&str> = token.split(':').collect();
-            if parts.len() >= 3 {
+            // Fallback for non-JWT format (for backwards compatibility)
+            if token.starts_with("{") && token.ends_with("}") {
+                // Parse as JSON
+                #[derive(serde::Deserialize)]
+                struct DevClaims {
+                    user_id: String,
+                    email: String,
+                    name: String,
+                }
+
+                let claims: DevClaims = serde_json::from_str(token)
+                    .map_err(|_| AuthError::InvalidToken)?;
+
                 Ok(User {
-                    id: uuid::Uuid::parse_str(parts[0])
+                    id: uuid::Uuid::parse_str(&claims.user_id)
                         .unwrap_or_else(|_| uuid::Uuid::new_v4()),
-                    email: parts[1].to_string(),
-                    display_name: parts[2].to_string(),
+                    email: claims.email,
+                    display_name: claims.name,
                     total_points: 0,
                     total_wins: 0,
                     total_games: 0,
                     created_at: chrono::Utc::now().to_string(),
                 })
             } else {
-                Err(AuthError::InvalidToken)
+                // Simple string format: "user_id:email:name"
+                let string_parts: Vec<&str> = token.split(':').collect();
+                if string_parts.len() >= 3 {
+                    Ok(User {
+                        id: uuid::Uuid::parse_str(string_parts[0])
+                            .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                        email: string_parts[1].to_string(),
+                        display_name: string_parts[2].to_string(),
+                        total_points: 0,
+                        total_wins: 0,
+                        total_games: 0,
+                        created_at: chrono::Utc::now().to_string(),
+                    })
+                } else {
+                    Err(AuthError::InvalidToken)
+                }
             }
         }
     }

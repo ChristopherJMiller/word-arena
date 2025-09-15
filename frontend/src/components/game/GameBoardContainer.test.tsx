@@ -16,6 +16,7 @@ describe('GameBoardContainer Integration', () => {
     word_length: 5,
     current_round: 1,
     status: 'Active',
+    current_phase: 'Guessing',
     players: [
       {
         user_id: 'player-1',

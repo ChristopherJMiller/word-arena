@@ -11,6 +11,8 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 game-types = { path = "../game-types" }
 chrono = { version = "0.4", features = ["serde"] }
+migration = { path = "../migration" }
+tracing = { workspace = true }
 
 [dev-dependencies]
 migration = { path = "../migration" }

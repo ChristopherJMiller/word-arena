@@ -31,6 +31,7 @@ impl Game {
             word_length: target_word.len() as i32,
             current_round: 1,
             status: GameStatus::Starting,
+            current_phase: GamePhase::Waiting,
             players,
             official_board: Vec::new(),
             current_winner: None,
@@ -125,17 +126,17 @@ impl Game {
             // Check if word is solved
             if winning_word.to_lowercase() == self.target_word.to_lowercase() {
                 self.state.status = GameStatus::Completed;
-                self.current_phase = GamePhase::GameOver;
+                self.set_phase(GamePhase::GameOver);
             } else {
                 // Check if anyone has won by points
                 if let Some(_winner) = self.state.players.iter().find(|p| p.points >= self.state.point_threshold) {
                     self.state.status = GameStatus::Completed;
-                    self.current_phase = GamePhase::GameOver;
+                    self.set_phase(GamePhase::GameOver);
                 } else {
                     // Continue to next round
                     self.state.current_round += 1;
                     self.state.current_winner = Some(winning_player_id);
-                    self.current_phase = GamePhase::IndividualGuess;
+                    self.set_phase(GamePhase::IndividualGuess);
                 }
             }
 
@@ -161,7 +162,7 @@ impl Game {
 
     pub fn set_countdown(&mut self, duration: Duration) {
         self.countdown_end = Some(SystemTime::now() + duration);
-        self.current_phase = GamePhase::Countdown;
+        self.set_phase(GamePhase::Countdown);
     }
 
     pub fn is_countdown_finished(&self) -> bool {
@@ -170,6 +171,15 @@ impl Game {
         } else {
             false
         }
+    }
+
+    fn set_phase(&mut self, phase: GamePhase) {
+        self.current_phase = phase.clone();
+        self.state.current_phase = phase;
+    }
+
+    pub fn start_guessing_phase(&mut self) {
+        self.set_phase(GamePhase::Guessing);
     }
 }
 

@@ -26,6 +26,7 @@ describe('GameStore Logic', () => {
     word_length: 5,
     current_round: 1,
     status: 'Active',
+    current_phase: 'Guessing',
     players: [
       {
         user_id: 'player-1',
@@ -179,6 +180,7 @@ describe('GameStore Reconnection Logic', () => {
     word_length: 5,
     current_round: 2,
     status: 'Active',
+    current_phase: 'Guessing',
     players: [
       {
         user_id: 'user-1',
@@ -276,25 +278,27 @@ describe('GameStore Reconnection Logic', () => {
       expect(mockWebSocketService.connect).toHaveBeenCalled();
     });
 
-    it('should send rejoin message when WebSocket is connected', async () => {
+    it('should not send rejoin message when WebSocket is connected', async () => {
       mockGameHttpClient.getGameState.mockResolvedValue(mockSafeGameState);
       mockWebSocketService.isConnected = true;
 
       await useGameStore.getState().reconnectToGame('test-game-123');
 
-      expect(mockWebSocketService.rejoinGame).toHaveBeenCalledWith('test-game-123');
+      // reconnectToGame should NOT call rejoinGame - it only fetches HTTP state
+      expect(mockWebSocketService.rejoinGame).not.toHaveBeenCalled();
     });
 
     it('should handle HTTP client errors gracefully', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       mockGameHttpClient.getGameState.mockRejectedValue(new Error('Network error'));
 
-      await useGameStore.getState().reconnectToGame('test-game-123');
+      // The function should throw the error since it can't fetch game state
+      await expect(useGameStore.getState().reconnectToGame('test-game-123')).rejects.toThrow('Network error');
 
       const state = useGameStore.getState();
       expect(state.isReconnecting).toBe(false);
       expect(state.gameState).toBe(null);
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error reconnecting to game:', expect.any(Error));
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error loading game state:', expect.any(Error));
       
       consoleErrorSpy.mockRestore();
     });
@@ -335,6 +339,7 @@ describe('GameStore Reconnection Logic', () => {
         word_length: 5,
         current_round: 1,
         status: 'Active',
+        current_phase: 'Guessing',
         players: [],
         official_board: [],
         current_winner: null,

@@ -60,12 +60,16 @@ impl ActiveGame {
         let word_validator = WordValidator::new(word_list);
         let target_word = word_validator.get_random_word(5).expect("Failed to get random word");
         
-        let game = Game::new(
+        let mut game = Game::new(
             Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::new_v4()),
             game_players,
             target_word,
             25, // Points to win from config
         );
+        
+        // Start the first round immediately
+        game.state.status = game_types::GameStatus::Active;
+        game.start_guessing_phase();
         
         let now = Instant::now();
         Self {

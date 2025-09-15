@@ -164,26 +164,80 @@ export const GuessInput: React.FC<GuessInputProps> = ({
 
 // Container component that connects to store
 export const GuessInputContainer: React.FC = () => {
-  const { gameState, currentGuess, isSubmitting, setCurrentGuess } = useGameStore();
-  const { sendMessage } = useWebSocket();
+  const { gameState, currentGuess, isSubmitting, setCurrentGuess, lastError, clearError, pendingGuess, setPendingGuess } = useGameStore();
+  const { sendMessage, isConnected, isAuthenticated } = useWebSocket();
 
   if (!gameState) {
     return null;
   }
 
   const handleSubmit = (guess: string) => {
-    sendMessage({ SubmitGuess: { word: guess } });
-    setCurrentGuess('');
+    console.log('Attempting to submit guess:', guess);
+    console.log('WebSocket connected:', isConnected);
+    console.log('WebSocket authenticated:', isAuthenticated);
+    
+    // Clear any previous errors
+    clearError();
+    
+    try {
+      sendMessage({ SubmitGuess: { word: guess } });
+      // Set the guess as pending and clear the current input
+      setPendingGuess(guess);
+      setCurrentGuess('');
+    } catch (error) {
+      console.error('Failed to send guess:', error);
+    }
   };
 
+  const handleGuessChange = (guess: string) => {
+    // Clear error and pending guess when user starts typing a new guess
+    if (lastError) {
+      clearError();
+    }
+    if (pendingGuess) {
+      setPendingGuess(null);
+    }
+    setCurrentGuess(guess);
+  };
+
+  // Determine if input should be disabled based on game state
+  const shouldDisableInput = () => {
+    if (isSubmitting) return true;
+    
+    // Only allow input during Active status with Guessing phase
+    if (gameState.status !== 'Active') return true;
+    
+    // Only allow input during Guessing phase
+    return gameState.current_phase !== 'Guessing';
+  };
+
+  // Show pending guess if it exists, otherwise show current guess
+  const displayGuess = pendingGuess || currentGuess;
+  const isShowingPending = !!pendingGuess;
+
   return (
-    <GuessInput
-      wordLength={gameState.word_length}
-      currentGuess={currentGuess}
-      isDisabled={isSubmitting}
-      onGuessChange={setCurrentGuess}
-      onSubmit={handleSubmit}
-    />
+    <div className="space-y-3">
+      <GuessInput
+        wordLength={gameState.word_length}
+        currentGuess={displayGuess}
+        isDisabled={shouldDisableInput() || isShowingPending}
+        onGuessChange={handleGuessChange}
+        onSubmit={handleSubmit}
+      />
+      {isShowingPending && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+          <p className="text-blue-600 text-sm">Waiting for other players to submit...</p>
+        </div>
+      )}
+      {lastError && (
+        <div 
+          className="bg-red-50 border border-red-200 rounded-lg p-3 text-center"
+          data-testid="error-message"
+        >
+          <p className="text-red-600 text-sm font-medium">{lastError}</p>
+        </div>
+      )}
+    </div>
   );
 };
 

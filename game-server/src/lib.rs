@@ -401,13 +401,23 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_websocket_join_queue_message() {
-        let app = create_test_app().await;
+        let app = create_dev_test_app().await;
 
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
             .await
             .expect("WebSocket handshake should succeed");
+
+        // First authenticate
+        let auth_msg = ClientMessage::Authenticate { 
+            token: "user1:test@example.com:Test User".to_string() 
+        };
+        let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
+        ws.send_text(&auth_json).await;
+        
+        // Consume authentication success message
+        let _auth_response = ws.recv().await.expect("Should receive auth response");
 
         // Send join queue message
         let join_msg = ClientMessage::JoinQueue;
@@ -432,7 +442,7 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_websocket_multiple_clients_queue() {
-        let app = create_test_app().await;
+        let app = create_dev_test_app().await;
 
         // Create two WebSocket connections
         let mut ws1 = warp::test::ws()
@@ -446,6 +456,21 @@ mod integration_tests {
             .handshake(app)
             .await
             .expect("WebSocket handshake should succeed");
+
+        // Authenticate both clients
+        let auth_msg1 = ClientMessage::Authenticate { 
+            token: "user3:test3@example.com:Test User 3".to_string() 
+        };
+        let auth_json1 = serde_json::to_string(&auth_msg1).expect("Should serialize");
+        ws1.send_text(&auth_json1).await;
+        let _auth_response1 = ws1.recv().await.expect("Should receive auth response");
+
+        let auth_msg2 = ClientMessage::Authenticate { 
+            token: "user4:test4@example.com:Test User 4".to_string() 
+        };
+        let auth_json2 = serde_json::to_string(&auth_msg2).expect("Should serialize");
+        ws2.send_text(&auth_json2).await;
+        let _auth_response2 = ws2.recv().await.expect("Should receive auth response");
 
         // Both clients join queue
         let join_msg = ClientMessage::JoinQueue;
@@ -519,13 +544,23 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_websocket_leave_queue() {
-        let app = create_test_app().await;
+        let app = create_dev_test_app().await;
 
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
             .await
             .expect("WebSocket handshake should succeed");
+
+        // First authenticate
+        let auth_msg = ClientMessage::Authenticate { 
+            token: "user2:test2@example.com:Test User 2".to_string() 
+        };
+        let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
+        ws.send_text(&auth_json).await;
+        
+        // Consume authentication success message
+        let _auth_response = ws.recv().await.expect("Should receive auth response");
 
         // Join queue first
         let join_msg = ClientMessage::JoinQueue;

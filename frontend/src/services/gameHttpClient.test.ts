@@ -12,6 +12,7 @@ describe('GameHttpClient', () => {
     word_length: 5,
     current_round: 2,
     status: 'Active',
+    current_phase: 'Guessing',
     players: [
       {
         user_id: 'user-1',

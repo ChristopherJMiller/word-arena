@@ -47,6 +47,9 @@ impl MessageHandler {
             ClientMessage::LeaveQueue => {
                 self.handle_leave_queue().await
             },
+            ClientMessage::VoteStartGame => {
+                self.handle_vote_start_game().await
+            },
             ClientMessage::SubmitGuess { word } => {
                 self.handle_submit_guess(word).await
             },
@@ -122,37 +125,8 @@ impl MessageHandler {
             Ok(position) => {
                 self.send_message(ServerMessage::QueueJoined { position }).await?;
                 
-                // Try to create a match
-                if let Ok(Some(match_info)) = self.matchmaking_queue.try_create_match().await {
-                    info!("Created match with {} players", match_info.players.len());
-                    
-                    // Create game
-                    match self.game_manager.create_game(match_info.players.clone()).await {
-                        Ok(game_id) => {
-                            // Notify all players
-                            for &player_id in &match_info.players {
-                                self.connection_manager.set_connection_game(player_id, Some(game_id.clone())).await;
-                                
-                                if let Err(e) = self.connection_manager.send_to_connection(
-                                    player_id,
-                                    ServerMessage::MatchFound {
-                                        game_id: game_id.clone(),
-                                        players: Vec::new(), // TODO: Get player info
-                                    }
-                                ).await {
-                                    warn!("Failed to notify player {} of match: {}", player_id, e);
-                                }
-                            }
-                        },
-                        Err(e) => {
-                            error!("Failed to create game: {}", e);
-                            // Put players back in queue
-                            for &player_id in &match_info.players {
-                                let _ = self.matchmaking_queue.add_player(player_id).await;
-                            }
-                        }
-                    }
-                }
+                // Broadcast countdown info to all players if countdown is active
+                self.broadcast_countdown_to_queue().await;
                 
                 Ok(())
             },
@@ -221,6 +195,36 @@ impl MessageHandler {
     async fn handle_heartbeat(&self) -> Result<(), String> {
         // Heartbeat just updates activity (already done in handle_message)
         Ok(())
+    }
+    
+    async fn handle_vote_start_game(&self) -> Result<(), String> {
+        info!("Player {} voting to start game", self.connection_id);
+        
+        // Check if player is authenticated
+        let connection = self.connection_manager.get_connection(self.connection_id).await
+            .ok_or("Connection not found")?;
+        
+        if !connection.is_authenticated {
+            return self.send_error("Authentication required to vote").await;
+        }
+        
+        // Check if player is in queue and vote
+        match self.matchmaking_queue.vote_to_start(self.connection_id).await {
+            Ok(has_enough_votes) => {
+                // Broadcast updated countdown info to all players in queue
+                self.broadcast_countdown_to_queue().await;
+                
+                // Check if we should start the match immediately
+                if has_enough_votes || self.matchmaking_queue.should_start_match().await {
+                    self.create_match_from_queue().await?;
+                }
+                
+                Ok(())
+            },
+            Err(e) => {
+                self.send_error(&format!("Failed to vote: {}", e)).await
+            }
+        }
     }
     
     async fn handle_rejoin_game(&self, game_id: String) -> Result<(), String> {
@@ -312,5 +316,98 @@ impl MessageHandler {
         self.send_message(ServerMessage::Error { 
             message: error_message.to_string() 
         }).await
+    }
+    
+    // Helper method to broadcast countdown info to all players in queue
+    async fn broadcast_countdown_to_queue(&self) {
+        if let Some(countdown_info) = self.matchmaking_queue.get_countdown_info().await {
+            let message = ServerMessage::MatchmakingCountdown {
+                seconds_remaining: countdown_info.seconds_remaining,
+                players_ready: countdown_info.players_ready,
+                total_players: countdown_info.total_players,
+            };
+            
+            // Get all players in queue and broadcast to each
+            let queue_players = self.matchmaking_queue.get_queue_players().await;
+            info!("Broadcasting countdown to {} players in queue", queue_players.len());
+            
+            for player_id in queue_players {
+                if let Err(e) = self.connection_manager.send_to_connection(player_id, message.clone()).await {
+                    warn!("Failed to send countdown update to {}: {}", player_id, e);
+                }
+            }
+        }
+    }
+    
+    // Helper method to create a match from the current queue
+    async fn create_match_from_queue(&self) -> Result<(), String> {
+        if let Ok(Some(match_info)) = self.matchmaking_queue.try_create_match().await {
+            info!("Creating match with {} players", match_info.players.len());
+            
+            // Get player info for the match
+            let mut players_info = Vec::new();
+            for &player_id in &match_info.players {
+                if let Some(connection) = self.connection_manager.get_connection(player_id).await {
+                    if let Some(ref user) = connection.user {
+                        players_info.push(game_types::Player {
+                            user_id: user.id,
+                            display_name: user.display_name.clone(),
+                            points: 0,
+                            guess_history: Vec::new(),
+                            is_connected: true,
+                        });
+                    }
+                }
+            }
+            
+            // Create game
+            match self.game_manager.create_game(match_info.players.clone()).await {
+                Ok(game_id) => {
+                    // Get initial game state
+                    let initial_game_state = self.game_manager.get_game_state(&game_id).await;
+                    
+                    // Notify all players of match and send initial game state
+                    for &player_id in &match_info.players {
+                        self.connection_manager.set_connection_game(player_id, Some(game_id.clone())).await;
+                        
+                        // Send MatchFound message
+                        if let Err(e) = self.connection_manager.send_to_connection(
+                            player_id,
+                            ServerMessage::MatchFound {
+                                game_id: game_id.clone(),
+                                players: players_info.clone(),
+                            }
+                        ).await {
+                            warn!("Failed to notify player {} of match: {}", player_id, e);
+                        }
+                        
+                        // Send initial game state
+                        if let Some(ref game_state) = initial_game_state {
+                            if let Err(e) = self.connection_manager.send_to_connection(
+                                player_id,
+                                ServerMessage::GameStateUpdate {
+                                    state: game_state.clone(),
+                                }
+                            ).await {
+                                warn!("Failed to send initial game state to {}: {}", player_id, e);
+                            }
+                        }
+                    }
+                    
+                    info!("Successfully created match {} with {} players and sent initial state", game_id, match_info.players.len());
+                    Ok(())
+                },
+                Err(e) => {
+                    error!("Failed to create game: {}", e);
+                    // Put players back in queue
+                    for &player_id in &match_info.players {
+                        let _ = self.matchmaking_queue.add_player(player_id).await;
+                    }
+                    Err(format!("Failed to create game: {}", e))
+                }
+            }
+        } else {
+            Ok(()) // No match to create
+        }
     }
 }

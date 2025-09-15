@@ -8,12 +8,42 @@ vi.mock('../../store/gameStore', () => ({
   useGameStore: vi.fn(() => ({
     setGameId: vi.fn(),
     gameState: null,
-    reconnectToGame: vi.fn(),
+    reconnectToGame: vi.fn().mockResolvedValue(undefined),
+    setGameState: vi.fn(),
+    setCountdownEndTime: vi.fn(),
+    addPersonalGuess: vi.fn(),
+    gameId: null,
+    currentGuess: '',
+    isSubmitting: false,
+    countdownEndTime: undefined,
+    isReconnecting: false,
+    personalGuessHistory: [],
+    setCurrentGuess: vi.fn(),
+    setIsSubmitting: vi.fn(),
+    setIsReconnecting: vi.fn(),
+    rejoinAfterDisconnect: vi.fn(),
+    resetGame: vi.fn(),
   })),
 }));
 
 vi.mock('./GameLayout', () => ({
   GameLayout: () => <div data-testid="game-layout">Game Layout</div>,
+}));
+
+vi.mock('../auth/AuthProvider', () => ({
+  useAuth: vi.fn(() => ({
+    isAuthenticated: true,
+    user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User' },
+  })),
+}));
+
+vi.mock('../../hooks/useWebSocket', () => ({
+  useWebSocket: vi.fn(() => ({
+    isConnected: true,
+    isAuthenticated: true,
+    addMessageHandler: vi.fn(),
+    removeMessageHandler: vi.fn(),
+  })),
 }));
 
 import { useGameStore } from '../../store/gameStore';
@@ -23,12 +53,37 @@ const mockUseGameStore = vi.mocked(useGameStore);
 describe('Game Component', () => {
   const mockStore = {
     setGameId: vi.fn(),
-    gameState: null,
-    reconnectToGame: vi.fn(),
+    gameState: null as any,
+    reconnectToGame: vi.fn().mockResolvedValue(undefined),
+    setGameState: vi.fn(),
+    setCountdownEndTime: vi.fn(),
+    addPersonalGuess: vi.fn(),
+    gameId: null,
+    currentGuess: '',
+    isSubmitting: false,
+    countdownEndTime: undefined,
+    isReconnecting: false,
+    personalGuessHistory: [],
+    setCurrentGuess: vi.fn(),
+    setIsSubmitting: vi.fn(),
+    setIsReconnecting: vi.fn(),
+    rejoinAfterDisconnect: vi.fn(),
+    resetGame: vi.fn(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset all mock functions
+    mockStore.setGameId.mockClear();
+    mockStore.reconnectToGame.mockResolvedValue(undefined);
+    mockStore.setGameState.mockClear();
+    mockStore.setCountdownEndTime.mockClear();
+    mockStore.addPersonalGuess.mockClear();
+    mockStore.setCurrentGuess.mockClear();
+    mockStore.setIsSubmitting.mockClear();
+    mockStore.setIsReconnecting.mockClear();
+    mockStore.rejoinAfterDisconnect.mockClear();
+    mockStore.resetGame.mockClear();
     mockUseGameStore.mockReturnValue(mockStore as any);
   });
 

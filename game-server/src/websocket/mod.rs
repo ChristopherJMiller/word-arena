@@ -13,6 +13,9 @@ pub mod connection;
 pub mod handlers;
 pub mod rate_limiter;
 
+#[cfg(test)]
+pub mod integration_tests;
+
 pub use connection::ConnectionManager;
 use connection::ConnectionId;
 use handlers::MessageHandler;

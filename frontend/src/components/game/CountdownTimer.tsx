@@ -144,8 +144,21 @@ export const CountdownTimerContainer: React.FC = () => {
     return null;
   }
 
-  // For now, map status to phase - this should be updated when backend provides phase
-  const gamePhase: GamePhase = gameState.status === 'Active' ? 'Guessing' : 'Waiting';
+  // Map game status to phase
+  const gamePhase: GamePhase = (() => {
+    switch (gameState.status) {
+      case 'Active':
+        return 'Guessing';
+      case 'Starting':
+        return 'Countdown';
+      case 'Completed':
+      case 'Abandoned':
+      case 'TimedOut':
+        return 'GameOver';
+      default:
+        return 'Waiting';
+    }
+  })();
 
   return (
     <CountdownTimer

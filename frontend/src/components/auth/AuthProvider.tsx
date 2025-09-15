@@ -43,25 +43,63 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const isDevMode = import.meta.env.VITE_AUTH_DEV_MODE === 'true'
 
+  // Create a mock JWT token for development
+  const createMockJWT = (userId: string, email: string, displayName: string): string => {
+    // JWT header (base64 encoded)
+    const header = {
+      alg: "RS256",
+      typ: "JWT",
+      kid: "dev-key-id"
+    }
+    
+    // JWT payload/claims
+    const payload = {
+      aud: "dev-client-id",
+      iss: "https://login.microsoftonline.com/dev/v2.0",
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
+      sub: userId,
+      email: email,
+      name: displayName,
+      preferred_username: email
+    }
+    
+    // Base64 encode header and payload
+    const encodedHeader = btoa(JSON.stringify(header)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    const encodedPayload = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    
+    // Create mock signature (just base64 encoded "dev-signature")
+    const mockSignature = btoa("dev-signature").replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+    
+    // Return complete JWT
+    return `${encodedHeader}.${encodedPayload}.${mockSignature}`
+  }
+
   // Manual dev login function exposed to components
   const devLogin = (displayName: string, email?: string) => {
     const userId = `dev-user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const userEmail = email || `${displayName.toLowerCase().replace(/\s+/g, '.')}@dev.example.com`
     const devUser: User = {
       id: userId,
-      email: email || `${displayName.toLowerCase().replace(/\s+/g, '.')}@dev.example.com`,
+      email: userEmail,
       display_name: displayName,
       total_points: Math.floor(Math.random() * 500),
       total_wins: Math.floor(Math.random() * 20),
+      total_games: Math.floor(Math.random() * 50),
       created_at: new Date().toISOString(),
     }
+    
+    // Create mock JWT token
+    const devToken = createMockJWT(userId, userEmail, displayName)
+    
     setUser(devUser)
-    setAccessToken(`dev-token-${userId}`)
+    setAccessToken(devToken)
     setIsAuthenticated(true)
     
     // Store in localStorage for session persistence
     localStorage.setItem('dev-user', JSON.stringify({
       user: devUser,
-      token: `dev-token-${userId}`
+      token: devToken
     }))
     
     console.log('Development mode: manually authenticated as:', devUser.display_name)
@@ -123,6 +161,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         display_name: account.name || account.username,
         total_points: 0,
         total_wins: 0,
+        total_games: 0,
         created_at: new Date().toISOString(),
       }
 

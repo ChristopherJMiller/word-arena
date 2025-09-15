@@ -3,7 +3,7 @@ use std::time::Duration;
 use tracing::info;
 
 use game_server::{auth::AuthService, create_routes, websocket::ConnectionManager, game_manager::GameManager, matchmaking::MatchmakingQueue, config::Config};
-use game_persistence::{repositories::UserRepository, connection::connect_to_database};
+use game_persistence::{repositories::UserRepository, connection::connect_and_migrate};
 
 #[tokio::main]
 async fn main() {
@@ -18,8 +18,14 @@ async fn main() {
     let game_manager = Arc::new(GameManager::new());
     let matchmaking_queue = Arc::new(MatchmakingQueue::new());
     
-    // Initialize database connection
-    let db = connect_to_database().await.expect("Failed to connect to database");
+    // Initialize database connection and run migrations
+    let db = match connect_and_migrate().await {
+        Ok(db) => db,
+        Err(e) => {
+            tracing::error!("Failed to connect to database and run migrations: {}", e);
+            std::process::exit(1);
+        }
+    };
     let user_repository = Arc::new(UserRepository::new(db));
     
     // Check for dev mode

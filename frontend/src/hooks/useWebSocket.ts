@@ -9,6 +9,31 @@ export function useWebSocket() {
   const [isWSAuthenticated, setIsWSAuthenticated] = useState(false)
   const wsService = useRef(getWebSocketService())
 
+  // Sync local state with WebSocket service state
+  useEffect(() => {
+    const checkConnectionState = () => {
+      const serviceConnected = wsService.current.isConnected
+      const serviceAuthenticated = wsService.current.authenticated
+      
+      if (isConnected !== serviceConnected) {
+        console.log('Syncing connection state:', serviceConnected)
+        setIsConnected(serviceConnected)
+      }
+      if (isWSAuthenticated !== serviceAuthenticated) {
+        console.log('Syncing authentication state:', serviceAuthenticated)
+        setIsWSAuthenticated(serviceAuthenticated)
+      }
+    }
+
+    // Check state every second to stay in sync
+    const interval = setInterval(checkConnectionState, 1000)
+    
+    // Also check immediately
+    checkConnectionState()
+
+    return () => clearInterval(interval)
+  }, [isConnected, isWSAuthenticated])
+
   useEffect(() => {
     const connectAndAuthenticate = async () => {
       try {
