@@ -5,6 +5,7 @@ FROM rust:1.89-slim AS builder
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -18,6 +19,11 @@ COPY game-types game-types
 COPY game-persistence game-persistence
 COPY game-server game-server
 COPY migration migration
+
+# Copy and run word generation script
+COPY scripts/download_and_split_words.sh scripts/
+RUN chmod +x scripts/download_and_split_words.sh && \
+    ./scripts/download_and_split_words.sh word_lists
 
 # Build the application
 RUN cargo build --release --bin game-server

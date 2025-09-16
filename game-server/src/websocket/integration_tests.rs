@@ -18,7 +18,7 @@ use std::sync::Arc;
 async fn test_complete_matchmaking_flow() {
     // Initialize test components
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = Arc::new(GameManager::new(connection_manager.clone(), "../word_lists").unwrap());
+    let game_manager = Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
     let matchmaking_queue = Arc::new(MatchmakingQueue::new());
     let auth_service = Arc::new(AuthService::new_dev_mode());
 
@@ -275,7 +275,8 @@ async fn test_complete_matchmaking_flow() {
         assert_eq!(state.current_round, 1);
         assert!(matches!(state.status, game_types::GameStatus::Active));
         // Word should be hidden for game state updates (masked with asterisks)
-        assert_eq!(state.word, "*****");
+        assert!(state.word.chars().all(|c| c == '*'));
+        assert!(state.word.len() >= 5 && state.word.len() <= 7);
     } else {
         panic!("Expected GameStateUpdate message, got: {:?}", state_msg1);
     }

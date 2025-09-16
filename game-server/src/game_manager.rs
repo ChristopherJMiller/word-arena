@@ -127,6 +127,15 @@ impl GameManager {
         })
     }
 
+    /// Create a new GameManager with word lists loaded from the default directory
+    /// Uses WORD_LISTS_DIR environment variable or falls back to "../word_lists"
+    pub fn new_with_default_words(
+        connection_manager: Arc<ConnectionManager>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let words_dir = std::env::var("WORD_LISTS_DIR").unwrap_or_else(|_| "../word_lists".to_string());
+        Self::new(connection_manager, words_dir)
+    }
+
     pub async fn create_game(&self, players: Vec<ConnectionId>) -> Result<String, String> {
         if players.len() < 2 {
             return Err("Need at least 2 players to create a game".to_string());

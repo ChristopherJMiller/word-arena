@@ -93,8 +93,15 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Generate word lists
+      run: |
+        chmod +x scripts/download_and_split_words.sh
+        ./scripts/download_and_split_words.sh word_lists
+
     - name: Run backend tests
-      run: npm run test:backend
+      run: |
+        export WORD_LISTS_DIR="word_lists"
+        npm run test:backend
 
     - name: Log in to Container Registry
       if: github.event_name != 'pull_request'

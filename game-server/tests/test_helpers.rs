@@ -44,7 +44,7 @@ impl TestGameServerSetup {
         let connection_manager = Arc::new(ConnectionManager::new());
         Self {
             connection_manager: connection_manager.clone(),
-            game_manager: Arc::new(GameManager::new(connection_manager, "../word_lists").unwrap()),
+            game_manager: Arc::new(GameManager::new_with_default_words(connection_manager).unwrap()),
             matchmaking_queue: Arc::new(MatchmakingQueue::new()),
             auth_service: Arc::new(AuthService::new_dev_mode()),
         }
