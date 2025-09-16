@@ -28,6 +28,7 @@ src/
 │   │   ├── PlayerList.tsx         # Current match players ✅
 │   │   ├── CountdownTimer.tsx     # Round countdown ✅
 │   │   ├── GameLayout.tsx         # Responsive game layout ✅
+│   │   ├── RoundCompletionModal.tsx # Word completion celebration ✅
 │   │   └── PointsDisplay.tsx      # Current scores
 │   ├── lobby/
 │   │   ├── Leaderboard.tsx        # Global leaderboards
@@ -89,6 +90,7 @@ Cargo.toml                         # Rust workspace configuration
 │       │   │   ├── GuessInput.tsx         # Guess submission form
 │       │   │   ├── PlayerList.tsx         # Current match players
 │       │   │   ├── CountdownTimer.tsx     # Round countdown
+│       │   │   ├── RoundCompletionModal.tsx # Word completion celebration
 │       │   │   └── PointsDisplay.tsx      # Current scores
 │       │   ├── lobby/
 │       │   │   ├── Leaderboard.tsx        # Global leaderboards
@@ -402,18 +404,76 @@ import { ClientMessage, ServerMessage } from '../types/generated';
 
 ## Game Flow Implementation
 
+### Multi-Round Match Architecture
+
+**Word Arena matches are comprised of multiple rounds, not single-word games.** Players accumulate points across rounds until one reaches the point threshold to win the entire match.
+
 ### Match Lifecycle
 1. **Queue Management**: Players join a queue, server groups 2-16 players
-2. **Game Initialization**: Create game state, select word, notify players
-3. **Round Loop**:
-   - Send countdown to all players
-   - Collect guesses during countdown
-   - Evaluate all guesses, determine winner
-   - Update official board with winning guess
-   - Send results to all players (winner gets full feedback, others get points only)
-   - If word not solved: individual guess phase for winner, then return to countdown
-   - If word solved: award final points, check win conditions
-4. **Game End**: Declare winner, update leaderboards, return players to lobby
+2. **Game Initialization**: Create game state, select first word, notify players
+3. **Round Loop** (repeats until match completion):
+   - **Collaborative Phase**: Send countdown to all players, collect simultaneous guesses
+   - **Evaluation**: Determine winner by most correct letters (blue > orange priority)
+   - **Individual Phase**: Winner makes bonus guess that cannot be previously guessed word
+   - **Round Completion Check**:
+     - If word is correctly guessed: **Start new round** with fresh word (ROUND_COMPLETE signal)
+     - If word not solved: Continue collaborative guessing
+   - **Match Completion Check**: If any player reaches point threshold, match ends
+4. **Match End**: Declare winner, update leaderboards, return players to lobby
+
+### Round Restart Logic (NEW)
+
+**Key Architecture Change**: Word completion no longer ends the entire game, but triggers a new round:
+
+```rust
+// game-core/src/game_state.rs - Core Logic
+} else if winning_word.to_lowercase() == self.target_word.to_lowercase() {
+    // Word was solved - start new round with new word
+    // Signal to GameManager to handle round restart
+    return Err(anyhow!("ROUND_COMPLETE:{}", winning_word));
+```
+
+```rust
+// game-server/src/game_manager.rs - Round Restart Handler
+if error_msg.starts_with("ROUND_COMPLETE:") {
+    let winning_word = error_msg.strip_prefix("ROUND_COMPLETE:").unwrap_or("");
+    
+    // Generate new word and reset round state
+    let new_word = self.word_validator.get_random_word(5)?;
+    active_game.game.target_word = new_word.clone();
+    active_game.game.state.current_round += 1;
+    active_game.game.state.official_board.clear();
+    active_game.game.state.current_winner = None;
+    active_game.game.current_guesses.clear();
+    
+    // Reset to collaborative guessing phase
+    active_game.game.current_phase = GamePhase::Guessing;
+    active_game.game.start_guessing_phase();
+}
+```
+
+### Round Completion UI
+
+**Round Completion Modal**: Celebrates word completion and provides feedback:
+
+```typescript
+// RoundCompletionModal.tsx
+interface RoundCompletionModalProps {
+  winningGuess: GuessResult;     // Who guessed it and how many points
+  currentRound: number;          // Round progression
+  players: Player[];             // Current standings
+  autoCloseDelay?: number;       // Auto-close after 4 seconds
+}
+```
+
+**Modal Features**:
+- 🎉 Celebration animation with confetti-style emoji
+- Winner announcement with player name and points earned
+- Round progression indicator (Round N → Round N+1)
+- Auto-close countdown with manual override
+- Mobile-responsive design
+
+**Integration**: Modal triggered when `RoundResult.winning_guess.points_earned === 5` (word completion points)
 
 ### Database Setup with SeaORM
 ```rust
@@ -772,6 +832,7 @@ pub enum GameStatus {
   - GuessHistory: Personal guess tracking with point calculations ✅
   - CountdownTimer: Game phase timing with visual feedback ✅
   - GameLayout: Mobile-responsive 3-column to stacked layout ✅
+  - RoundCompletionModal: Word completion celebration with round progression ✅
 - **State Management**: Zustand stores for game and auth state ✅
 - **Component Testing**: 28 tests covering UI, integration, and logic ✅
 
@@ -787,6 +848,14 @@ pub enum GameStatus {
   - Global WebSocket message handling for GameStateUpdate, CountdownStart, RoundResult, GameOver ✅
   - Development authentication with DevLoginForm for multi-user testing ✅
   - All game components connected to real-time events ✅
+
+- **Multi-Round Match Architecture**: Core architecture redesign for round-based gameplay ✅
+  - Round restart logic replacing single-game completion ✅
+  - ROUND_COMPLETE signal pattern for GameManager coordination ✅
+  - Game state reset with new word generation and board clearing ✅
+  - Round progression tracking with current_round increment ✅
+  - Match completion only when point threshold reached ✅
+  - Round completion UI with celebration modal and progress feedback ✅
 
 📋 **REMAINING:**
 - **Leaderboards**: Simple point and win tracking integration

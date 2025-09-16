@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import { useAuth } from './AuthProvider';
+import React, { useState } from "react";
+import { useAuth } from "./AuthProvider";
 
 interface DevLoginFormProps {
   onLogin?: () => void;
 }
 
 const presetUsers = [
-  { name: 'Alice', email: 'alice@dev.example.com' },
-  { name: 'Bob', email: 'bob@dev.example.com' },
-  { name: 'Charlie', email: 'charlie@dev.example.com' },
-  { name: 'Diana', email: 'diana@dev.example.com' },
-  { name: 'Eve', email: 'eve@dev.example.com' },
+  { name: "Alice", email: "alice@dev.example.com" },
+  { name: "Bob", email: "bob@dev.example.com" },
+  { name: "Charlie", email: "charlie@dev.example.com" },
+  { name: "Diana", email: "diana@dev.example.com" },
+  { name: "Eve", email: "eve@dev.example.com" },
 ];
 
 export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
-  const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
   const [showCustomForm, setShowCustomForm] = useState(false);
   const { devLogin, isDevMode } = useAuth();
 
@@ -32,8 +32,8 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
     e.preventDefault();
     if (displayName.trim()) {
       devLogin(displayName.trim(), email.trim() || undefined);
-      setDisplayName('');
-      setEmail('');
+      setDisplayName("");
+      setEmail("");
       setShowCustomForm(false);
       onLogin?.();
     }
@@ -45,7 +45,9 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
         <div className="inline-flex items-center px-3 py-1 bg-yellow-200 text-yellow-800 text-sm font-medium rounded-full">
           🔧 Development Mode
         </div>
-        <h3 className="text-lg font-semibold text-gray-800 mt-2">Quick Login</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mt-2">
+          Quick Login
+        </h3>
         <p className="text-sm text-gray-600">
           Choose a preset user or create a custom one for testing
         </p>
@@ -80,7 +82,10 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
       ) : (
         <form onSubmit={handleCustomLogin} className="space-y-4">
           <div>
-            <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="displayName"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Display Name *
             </label>
             <input
@@ -93,9 +98,12 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
               required
             />
           </div>
-          
+
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Email (optional)
             </label>
             <input
@@ -119,8 +127,8 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
               type="button"
               onClick={() => {
                 setShowCustomForm(false);
-                setDisplayName('');
-                setEmail('');
+                setDisplayName("");
+                setEmail("");
               }}
               className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
             >
@@ -132,8 +140,9 @@ export const DevLoginForm: React.FC<DevLoginFormProps> = ({ onLogin }) => {
 
       <div className="mt-4 p-3 bg-blue-50 rounded-lg">
         <p className="text-xs text-blue-700">
-          💡 <strong>Multi-user testing tip:</strong> Open multiple private/incognito browser windows 
-          and login as different users to test multiplayer functionality.
+          💡 <strong>Multi-user testing tip:</strong> Open multiple
+          private/incognito browser windows and login as different users to test
+          multiplayer functionality.
         </p>
       </div>
     </div>

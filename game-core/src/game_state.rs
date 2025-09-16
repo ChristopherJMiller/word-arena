@@ -1,6 +1,9 @@
 use crate::{GameEvent, GameEventBus, ScoringEngine, WordValidator};
 use anyhow::{Result, anyhow};
-use game_types::{GamePhase, GameState, GameStatus, GuessResult, PersonalGuess, Player};
+use game_types::{
+    GamePhase, GameState, GameStatus, GuessResult, PersonalGuess, Player, RoundCompletion,
+    RoundResult,
+};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -72,7 +75,7 @@ impl Game {
         Ok(())
     }
 
-    pub fn process_round(&mut self) -> Result<Option<GuessResult>> {
+    pub fn process_round(&mut self) -> Result<Option<RoundResult>> {
         if self.current_guesses.is_empty() {
             return Ok(None);
         }
@@ -129,32 +132,48 @@ impl Game {
             // Add to official board
             self.state.official_board.push(guess_result.clone());
 
-            // Check if word is solved
-            if winning_word.to_lowercase() == self.target_word.to_lowercase() {
-                self.state.status = GameStatus::Completed;
-                self.set_phase(GamePhase::GameOver);
-            } else {
-                // Check if anyone has won by points
-                if let Some(_winner) = self
-                    .state
-                    .players
-                    .iter()
-                    .find(|p| p.points >= self.state.point_threshold)
-                {
-                    self.state.status = GameStatus::Completed;
-                    self.set_phase(GamePhase::GameOver);
-                } else {
-                    // Continue to next round
-                    self.state.current_round += 1;
-                    self.state.current_winner = Some(winning_player_id);
-                    self.set_phase(GamePhase::IndividualGuess);
-                }
-            }
-
             // Clear current round guesses
             self.current_guesses.clear();
 
-            Ok(Some(guess_result))
+            // Check if anyone has won by points (only way to end the match)
+            tracing::info!(
+                "🎯 Checking point threshold: {} | Current scores: {:?}",
+                self.state.point_threshold,
+                self.state
+                    .players
+                    .iter()
+                    .map(|p| format!("{}: {}", p.display_name, p.points))
+                    .collect::<Vec<_>>()
+            );
+
+            if let Some(winner) = self
+                .state
+                .players
+                .iter()
+                .find(|p| p.points >= self.state.point_threshold)
+            {
+                tracing::info!(
+                    "🏆 GAME OVER! {} reached {} points (threshold: {})",
+                    winner.display_name,
+                    winner.points,
+                    self.state.point_threshold
+                );
+                self.state.status = GameStatus::Completed;
+                self.set_phase(GamePhase::GameOver);
+                Ok(Some(RoundResult::GameOver(guess_result)))
+            } else if winning_word.to_lowercase() == self.target_word.to_lowercase() {
+                // Word was solved - start new round with new word
+                Ok(Some(RoundResult::WordCompleted(RoundCompletion {
+                    word: winning_word.clone(),
+                    player_id: winning_player_id,
+                    points_earned,
+                })))
+            } else {
+                // Continue guessing - winner gets individual guess
+                self.state.current_winner = Some(winning_player_id);
+                self.set_phase(GamePhase::IndividualGuess);
+                Ok(Some(RoundResult::Continuing(guess_result)))
+            }
         } else {
             Ok(None)
         }
@@ -192,6 +211,109 @@ impl Game {
 
     pub fn start_guessing_phase(&mut self) {
         self.set_phase(GamePhase::Guessing);
+    }
+
+    /// Process an individual guess from the round winner
+    pub fn process_individual_guess(
+        &mut self,
+        player_id: PlayerId,
+        word: String,
+    ) -> Result<Option<RoundResult>> {
+        // Check if we're in the right phase
+        if self.current_phase != GamePhase::IndividualGuess {
+            return Err(anyhow!("Not in individual guess phase"));
+        }
+
+        // Check if this player is the current winner
+        if Some(player_id) != self.state.current_winner {
+            return Err(anyhow!("Only the round winner can make individual guesses"));
+        }
+
+        // Check if word was already guessed
+        let word_lower = word.to_lowercase();
+        for guess in &self.state.official_board {
+            if guess.word.to_lowercase() == word_lower {
+                return Err(anyhow!("Word '{}' was already guessed", word));
+            }
+        }
+
+        // Evaluate the guess
+        let (letter_results, points_earned) =
+            ScoringEngine::evaluate_guess(&word, &self.target_word, &self.state.official_board);
+
+        println!(
+            "Individual guess '{}' evaluated: {} points earned against target '{}' with {} previous guesses",
+            word,
+            points_earned,
+            self.target_word,
+            self.state.official_board.len()
+        );
+
+        // Create the guess result
+        let guess_result = GuessResult {
+            word: word.clone(),
+            player_id,
+            letters: letter_results,
+            points_earned,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+
+        // Update player score and history
+        for player in &mut self.state.players {
+            if player.user_id == player_id {
+                player.points += points_earned;
+                player.guess_history.push(PersonalGuess {
+                    word: word.clone(),
+                    points_earned,
+                    was_winning_guess: true,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                });
+                break;
+            }
+        }
+
+        // Add to official board
+        self.state.official_board.push(guess_result.clone());
+
+        // Check if anyone has won by points (only way to end the match)
+        tracing::info!(
+            "🎯 Checking point threshold after individual guess: {} | Current scores: {:?}",
+            self.state.point_threshold,
+            self.state
+                .players
+                .iter()
+                .map(|p| format!("{}: {}", p.display_name, p.points))
+                .collect::<Vec<_>>()
+        );
+
+        if let Some(winner) = self
+            .state
+            .players
+            .iter()
+            .find(|p| p.points >= self.state.point_threshold)
+        {
+            tracing::info!(
+                "🏆 GAME OVER! {} reached {} points after individual guess (threshold: {})",
+                winner.display_name,
+                winner.points,
+                self.state.point_threshold
+            );
+            self.state.status = GameStatus::Completed;
+            self.set_phase(GamePhase::GameOver);
+            Ok(Some(RoundResult::GameOver(guess_result)))
+        } else if word.to_lowercase() == self.target_word.to_lowercase() {
+            // Word was solved - start new round with new word
+            Ok(Some(RoundResult::WordCompleted(RoundCompletion {
+                word: word.clone(),
+                player_id,
+                points_earned,
+            })))
+        } else {
+            // Move back to collaborative guessing phase
+            self.state.current_winner = None; // Clear winner for next collaborative round
+            self.set_phase(GamePhase::Guessing);
+            Ok(Some(RoundResult::Continuing(guess_result)))
+        }
     }
 }
 
@@ -328,7 +450,7 @@ mod tests {
 
     fn create_test_validator() -> WordValidator {
         let word_list = "apple\nbanana\ncherry\ntests\nvalid\nhello\nworld";
-        WordValidator::new(word_list)
+        WordValidator::from_word_list(word_list)
     }
 
     fn create_test_player(name: &str) -> Player {
@@ -522,12 +644,31 @@ mod tests {
         let target_word = game.target_word.clone();
         let alice_id = players[0].user_id;
 
-        // Test word completion - game should end when target word is guessed
-        game.add_guess(alice_id, target_word).unwrap();
-        let result = game.process_round().unwrap();
-        assert!(result.is_some());
-        assert_eq!(game.state.status, GameStatus::Completed);
-        assert_eq!(game.current_phase, GamePhase::GameOver);
+        // Test word completion - should return WordCompleted result when target word is guessed
+        game.add_guess(alice_id, target_word.clone()).unwrap();
+        let result = game.process_round();
+
+        // Should return Ok with WordCompleted variant
+        assert!(result.is_ok());
+        let round_result = result.unwrap();
+        assert!(round_result.is_some());
+
+        // Check that it's a WordCompleted variant
+        if let Some(RoundResult::WordCompleted(completion)) = round_result {
+            assert_eq!(completion.word, target_word);
+            assert_eq!(completion.player_id, alice_id);
+            // 6 letters × 2 points each + 5 completion bonus = 17 points
+            assert_eq!(
+                completion.points_earned, 17,
+                "Expected 17 points for 6-letter word completion"
+            );
+        } else {
+            panic!("Expected WordCompleted result");
+        }
+
+        // Game state should not be Completed (round completion handled externally)
+        // It might be Starting or Active depending on game initialization
+        assert_ne!(game.state.status, GameStatus::Completed);
 
         // Test point threshold completion
         let mut game2 = Game::new(

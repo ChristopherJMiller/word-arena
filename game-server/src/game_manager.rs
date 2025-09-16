@@ -4,16 +4,18 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::info;
 use uuid::Uuid;
+use chrono;
 
-use crate::websocket::connection::ConnectionId;
+use crate::websocket::connection::{ConnectionId, ConnectionManager};
 use game_core::{Game, PlayerId, WordValidator};
-use game_types::{GamePhase, GameState, GuessResult, PersonalGuess, Player, SafeGameState};
+use game_types::{GamePhase, GameState, GuessResult, PersonalGuess, Player, SafeGameState, User, RoundCompletion, RoundResult};
 
 #[derive(Debug, Clone)]
 pub enum GameEvent {
     RoundResult {
         winning_guess: GuessResult,
         player_guesses: Vec<(ConnectionId, PersonalGuess)>,
+        is_word_completed: bool,
     },
     GameOver {
         winner: Player,
@@ -35,31 +37,36 @@ struct ActiveGame {
 }
 
 impl ActiveGame {
-    fn new(id: String, players: Vec<ConnectionId>) -> Self {
+    fn new(
+        id: String, 
+        authenticated_players: Vec<(ConnectionId, User)>,
+        word_validator: &WordValidator,
+    ) -> Result<Self, String> {
+        if authenticated_players.is_empty() {
+            return Err("Cannot create game with no players".to_string());
+        }
+
         let mut connection_to_player = HashMap::new();
         let mut player_to_connection = HashMap::new();
         let mut game_players = Vec::new();
 
-        for (i, connection_id) in players.iter().enumerate() {
-            let player_id = Uuid::new_v4();
+        for (connection_id, user) in authenticated_players.iter() {
             let player = Player {
-                user_id: player_id,
-                display_name: format!("Player {}", i + 1),
+                user_id: user.id,
+                display_name: user.display_name.clone(),
                 points: 0,
                 guess_history: Vec::new(),
                 is_connected: true,
             };
 
             game_players.push(player);
-            connection_to_player.insert(*connection_id, player_id);
-            player_to_connection.insert(player_id, *connection_id);
+            connection_to_player.insert(*connection_id, user.id);
+            player_to_connection.insert(user.id, *connection_id);
         }
 
-        // Create word validator to get a random word
-        let word_list = include_str!("../../shared/words/word_list.txt");
-        let word_validator = WordValidator::new(word_list);
+        // Get a random word from the shared word validator
         let target_word = word_validator
-            .get_random_word(5)
+            .get_random_word_random_length()
             .expect("Failed to get random word");
 
         let mut game = Game::new(
@@ -74,14 +81,14 @@ impl ActiveGame {
         game.start_guessing_phase();
 
         let now = Instant::now();
-        Self {
+        Ok(Self {
             id,
             game,
             connection_to_player,
             player_to_connection,
             created_at: now,
             last_activity: now,
-        }
+        })
     }
 
     fn update_activity(&mut self) {
@@ -102,17 +109,22 @@ pub struct GameManager {
     active_games: RwLock<HashMap<String, ActiveGame>>,
     connection_to_game: RwLock<HashMap<ConnectionId, String>>,
     word_validator: Arc<WordValidator>,
+    connection_manager: Arc<ConnectionManager>,
 }
 
 impl GameManager {
-    pub fn new() -> Self {
-        Self {
+    /// Create a new GameManager with word lists loaded from a directory
+    pub fn new<P: AsRef<std::path::Path>>(
+        connection_manager: Arc<ConnectionManager>,
+        words_dir: P,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let word_validator = WordValidator::new(words_dir)?;
+        Ok(Self {
             active_games: RwLock::new(HashMap::new()),
             connection_to_game: RwLock::new(HashMap::new()),
-            word_validator: Arc::new(WordValidator::new(include_str!(
-                "../../shared/words/word_list.txt"
-            ))),
-        }
+            word_validator: Arc::new(word_validator),
+            connection_manager,
+        })
     }
 
     pub async fn create_game(&self, players: Vec<ConnectionId>) -> Result<String, String> {
@@ -120,8 +132,32 @@ impl GameManager {
             return Err("Need at least 2 players to create a game".to_string());
         }
 
+        // Validate that all players are authenticated and get their user info
+        let mut authenticated_players = Vec::new();
+        for connection_id in &players {
+            let connection = self.connection_manager.get_connection(*connection_id).await
+                .ok_or_else(|| format!("Connection {} not found", connection_id))?;
+            
+            if !connection.is_authenticated {
+                return Err(format!("Connection {} is not authenticated", connection_id));
+            }
+            
+            let user = connection.user
+                .ok_or_else(|| format!("No user info for connection {}", connection_id))?;
+            
+            authenticated_players.push((*connection_id, user));
+        }
+
+        // Check for duplicate users - prevent same user from joining twice
+        let mut user_ids = std::collections::HashSet::new();
+        for (_, user) in &authenticated_players {
+            if !user_ids.insert(user.id) {
+                return Err(format!("User {} is already in the game", user.display_name));
+            }
+        }
+
         let game_id = Uuid::new_v4().to_string();
-        let active_game = ActiveGame::new(game_id.clone(), players.clone());
+        let active_game = ActiveGame::new(game_id.clone(), authenticated_players, &self.word_validator)?;
 
         {
             let mut games = self.active_games.write().await;
@@ -135,7 +171,7 @@ impl GameManager {
             }
         }
 
-        info!("Created game {} with {} players", game_id, players.len());
+        info!("Created game {} with {} authenticated players", game_id, players.len());
         Ok(game_id)
     }
 
@@ -161,91 +197,177 @@ impl GameManager {
             return Err("Invalid word".to_string());
         }
 
-        // Add guess to game
-        if let Err(e) = active_game.game.add_guess(player_id, word.clone()) {
-            return Err(format!("Failed to add guess: {:?}", e));
-        }
+        // Handle different game phases
+        tracing::info!("Processing guess '{}' from player {} in phase {:?}", word, player_id, active_game.game.current_phase);
+        match active_game.game.current_phase {
+            GamePhase::IndividualGuess => {
+                // Individual guess phase - only winner can guess
+                tracing::info!("Individual guess phase - current winner: {:?}, submitting player: {}", active_game.game.state.current_winner, player_id);
+                match active_game.game.process_individual_guess(player_id, word) {
+                    Ok(Some(round_result)) => {
+                        match round_result {
+                            RoundResult::Continuing(guess_result) => {
+                                // Create personal guess for the player
+                                let personal_guess = if let Some(last_guess) = active_game.game.state.players
+                                    .iter()
+                                    .find(|p| p.user_id == player_id)
+                                    .and_then(|p| p.guess_history.last()) {
+                                    vec![(connection_id, last_guess.clone())]
+                                } else {
+                                    vec![]
+                                };
 
-        // Check if all connected players have submitted guesses
-        let connected_players: Vec<_> = active_game
-            .game
-            .state
-            .players
-            .iter()
-            .filter(|p| p.is_connected)
-            .map(|p| p.user_id)
-            .collect();
+                                return Ok(GameEvent::RoundResult {
+                                    winning_guess: guess_result,
+                                    player_guesses: personal_guess,
+                                    is_word_completed: false, // Regular round, not word completion
+                                });
+                            }
+                            RoundResult::WordCompleted(round_completion) => {
+                                // Start a new round with a fresh word
+                                self.start_new_round(active_game, round_completion).await
+                            }
+                            RoundResult::GameOver(_guess_result) => {
+                                if let Some(winner) = active_game.game.state.players.iter().max_by_key(|p| p.points) {
+                                    let final_scores = active_game.game.state.players.clone();
+                                    return Ok(GameEvent::GameOver {
+                                        winner: winner.clone(),
+                                        final_scores,
+                                    });
+                                } else {
+                                    return Err("Game over but no winner found".to_string());
+                                }
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        return Ok(GameEvent::StateUpdate {
+                            state: active_game.game.state.clone(),
+                        });
+                    }
+                    Err(e) => {
+                        return Err(format!("Individual guess error: {:?}", e));
+                    }
+                }
+            }
+            GamePhase::Guessing => {
+                // Collaborative guessing phase
+                if let Err(e) = active_game.game.add_guess(player_id, word.clone()) {
+                    return Err(format!("Failed to add guess: {:?}", e));
+                }
 
-        let all_connected_guessed = connected_players
-            .iter()
-            .all(|player_id| active_game.game.current_guesses.contains_key(player_id));
-
-        // Only process the round if all connected players have guessed
-        if !all_connected_guessed {
-            // Not all players have guessed yet, return state update
-            return Ok(GameEvent::StateUpdate {
-                state: active_game.game.state.clone(),
-            });
-        }
-
-        // All players have guessed, process the round
-        match active_game.game.process_round() {
-            Ok(Some(winning_guess)) => {
-                // The winning_guess is already in the correct format from game-core
-                // Create personal guess results for each player
-                let player_guesses: Vec<(ConnectionId, PersonalGuess)> = active_game
+                // Check if all connected players have submitted guesses
+                let connected_players: Vec<_> = active_game
                     .game
                     .state
                     .players
                     .iter()
-                    .filter_map(|player| {
-                        let conn_id = active_game.player_to_connection.get(&player.user_id)?;
-
-                        // Get the last guess from their history (most recent)
-                        if let Some(last_guess) = player.guess_history.last() {
-                            Some((*conn_id, last_guess.clone()))
-                        } else {
-                            None
-                        }
-                    })
+                    .filter(|p| p.is_connected)
+                    .map(|p| p.user_id)
                     .collect();
 
-                // Check if game is over
-                if active_game.game.current_phase == GamePhase::GameOver {
-                    // Find the winner
-                    if let Some(winner) = active_game
-                        .game
-                        .state
-                        .players
-                        .iter()
-                        .max_by_key(|p| p.points)
-                    {
-                        let final_scores = active_game.game.state.players.clone();
+                let all_connected_guessed = connected_players
+                    .iter()
+                    .all(|player_id| active_game.game.current_guesses.contains_key(player_id));
 
-                        Ok(GameEvent::GameOver {
-                            winner: winner.clone(),
-                            final_scores,
-                        })
-                    } else {
+                // Only process the round if all connected players have guessed
+                if !all_connected_guessed {
+                    // Not all players have guessed yet, return state update
+                    return Ok(GameEvent::StateUpdate {
+                        state: active_game.game.state.clone(),
+                    });
+                }
+
+                // All players have guessed, process the round
+                match active_game.game.process_round() {
+            Ok(Some(round_result)) => {
+                match round_result {
+                    RoundResult::Continuing(winning_guess) => {
+                        // The winning_guess is already in the correct format from game-core
+                        // Create personal guess results for each player
+                        let player_guesses: Vec<(ConnectionId, PersonalGuess)> = active_game
+                            .game
+                            .state
+                            .players
+                            .iter()
+                            .filter_map(|player| {
+                                let conn_id = active_game.player_to_connection.get(&player.user_id)?;
+
+                                // Get the last guess from their history (most recent)
+                                if let Some(last_guess) = player.guess_history.last() {
+                                    Some((*conn_id, last_guess.clone()))
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+
                         Ok(GameEvent::RoundResult {
                             winning_guess,
                             player_guesses,
+                            is_word_completed: false, // Regular round result
                         })
                     }
-                } else {
-                    Ok(GameEvent::RoundResult {
-                        winning_guess,
-                        player_guesses,
-                    })
+                    RoundResult::GameOver(winning_guess) => {
+                        // Find the winner
+                        if let Some(winner) = active_game
+                            .game
+                            .state
+                            .players
+                            .iter()
+                            .max_by_key(|p| p.points)
+                        {
+                            let final_scores = active_game.game.state.players.clone();
+
+                            Ok(GameEvent::GameOver {
+                                winner: winner.clone(),
+                                final_scores,
+                            })
+                        } else {
+                            // Fallback to round result if no winner found
+                            let player_guesses: Vec<(ConnectionId, PersonalGuess)> = active_game
+                                .game
+                                .state
+                                .players
+                                .iter()
+                                .filter_map(|player| {
+                                    let conn_id = active_game.player_to_connection.get(&player.user_id)?;
+                                    if let Some(last_guess) = player.guess_history.last() {
+                                        Some((*conn_id, last_guess.clone()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+
+                            Ok(GameEvent::RoundResult {
+                                winning_guess,
+                                player_guesses,
+                                is_word_completed: false, // Game over case
+                            })
+                        }
+                    }
+                    RoundResult::WordCompleted(round_completion) => {
+                        // Start a new round with a fresh word
+                        self.start_new_round(active_game, round_completion).await
+                    }
                 }
             }
-            Ok(None) => {
-                // No round result yet (waiting for more guesses)
-                Ok(GameEvent::StateUpdate {
-                    state: active_game.game.state.clone(),
-                })
+                Ok(None) => {
+                    // No round result yet (waiting for more guesses)
+                    Ok(GameEvent::StateUpdate {
+                        state: active_game.game.state.clone(),
+                    })
+                }
+                Err(e) => {
+                    Err(format!("Game error: {:?}", e))
+                }
             }
-            Err(e) => Err(format!("Game error: {:?}", e)),
+            }
+            _ => {
+                // Other phases like Waiting, Countdown, GameOver - no guessing allowed
+                Err("Cannot submit guess in current phase".to_string())
+            }
         }
     }
 
@@ -409,6 +531,74 @@ impl GameManager {
         }
     }
 
+    /// Starts a new round with a fresh word after completing a word
+    async fn start_new_round(&self, active_game: &mut ActiveGame, round_completion: RoundCompletion) -> Result<GameEvent, String> {
+        // Get a new random word with random length (5-8 letters)
+        let new_word = self.word_validator
+            .get_random_word_random_length()
+            .map_err(|e| format!("Failed to get new random word: {:?}", e))?;
+        
+        println!("Starting new round: completed word '{}' by player '{}', new word '{}'", round_completion.word, round_completion.player_id, new_word);
+        
+        // Update game with new word and reset state for new round
+        active_game.game.target_word = new_word.clone();
+        active_game.game.state.word = "*".repeat(new_word.len()); // Masked word for display
+        active_game.game.state.word_length = new_word.len() as i32;
+        
+        println!("Before round increment: round = {}", active_game.game.state.current_round);
+        active_game.game.state.current_round += 1;
+        println!("After round increment: round = {}", active_game.game.state.current_round);
+        active_game.game.state.official_board.clear(); // Clear the official board for new round
+        active_game.game.state.current_winner = None;
+        active_game.game.current_guesses.clear();
+        
+        // Reset to collaborative guessing phase
+        active_game.game.current_phase = GamePhase::Guessing;
+        active_game.game.start_guessing_phase();
+        
+        tracing::info!("New round started: round {}, new word length {}", 
+                      active_game.game.state.current_round, 
+                      active_game.game.state.word_length);
+        
+        // Get all players to send the round completion message to everyone
+        let player_guesses: Vec<(ConnectionId, PersonalGuess)> = active_game
+            .player_to_connection
+            .iter()
+            .filter_map(|(player_id, conn_id)| {
+                // Find the player's last guess from their history
+                let player = active_game.game.state.players
+                    .iter()
+                    .find(|p| &p.user_id == player_id)?;
+                
+                if let Some(last_guess) = player.guess_history.last() {
+                    Some((*conn_id, last_guess.clone()))
+                } else {
+                    // Even if they didn't guess, they should still get the notification
+                    // Create a dummy personal guess just for the notification
+                    Some((*conn_id, PersonalGuess {
+                        word: String::new(),
+                        points_earned: 0,
+                        was_winning_guess: false,
+                        timestamp: chrono::Utc::now().to_rfc3339(),
+                    }))
+                }
+            })
+            .collect();
+        
+        // Return a special round completion event that includes the completed word
+        Ok(GameEvent::RoundResult {
+            winning_guess: GuessResult {
+                word: round_completion.word,
+                player_id: round_completion.player_id,
+                letters: vec![], // Frontend will handle displaying the completed word
+                points_earned: round_completion.points_earned,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            },
+            player_guesses, // Now includes all players so everyone gets notified
+            is_word_completed: true, // This is explicitly a word completion event
+        })
+    }
+
     pub async fn get_active_games_count(&self) -> usize {
         let games = self.active_games.read().await;
         games.len()
@@ -417,6 +607,7 @@ impl GameManager {
 
 impl Default for GameManager {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(ConnectionManager::new()), "./shared/words")
+            .expect("Failed to load word directory for GameManager. Run './scripts/download_and_split_words.sh' to generate word lists.")
     }
 }

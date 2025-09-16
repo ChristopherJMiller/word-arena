@@ -302,11 +302,14 @@ impl MessageHandler {
                     .set_connection_game(self.connection_id, Some(game_id.clone()))
                     .await;
 
-                // Send current game state to the rejoining player
-                self.send_message(ServerMessage::GameStateUpdate {
-                    state: current_state,
-                })
-                .await?;
+                // Send personalized game state to the rejoining player
+                if let Some(ref user) = connection.user {
+                    let personalized_state = current_state.personalized_for_player(user.id);
+                    self.send_message(ServerMessage::GameStateUpdate {
+                        state: personalized_state,
+                    })
+                    .await?;
+                }
 
                 // Notify other players that this player has reconnected
                 if let Some(ref user) = connection.user {
@@ -343,12 +346,21 @@ impl MessageHandler {
             GameEvent::RoundResult {
                 winning_guess,
                 player_guesses,
+                is_word_completed,
             } => {
+                // Get the current game state to determine the next phase
+                let next_phase = if let Some(game_state) = self.game_manager.get_game_state(game_id).await {
+                    game_state.current_phase
+                } else {
+                    game_types::GamePhase::Guessing // Fallback
+                };
+
                 // Send winning guess to all players
                 let message = ServerMessage::RoundResult {
                     winning_guess: winning_guess.clone(),
                     your_guess: None, // Will be set per player
-                    next_phase: game_types::GamePhase::Guessing, // TODO: Determine correct phase
+                    next_phase,
+                    is_word_completed, // Use the flag from the game event
                 };
 
                 // Send personalized messages to each player
@@ -369,14 +381,28 @@ impl MessageHandler {
                         warn!("Failed to send round result to {}: {}", player_id, e);
                     }
                 }
+
+                // After sending round results, send personalized game state updates
+                if let Some(updated_state) = self.game_manager.get_game_state(game_id).await {
+                    tracing::info!("Sending GameStateUpdate after RoundResult - phase: {:?}, current_winner: {:?}", updated_state.current_phase, updated_state.current_winner);
+                    self.connection_manager.send_personalized_game_state(game_id, &updated_state).await;
+                }
             }
             GameEvent::GameOver {
                 winner,
                 final_scores,
             } => {
+                tracing::info!(
+                    "🏆 Game {} completed! Winner: {} ({} points) | Final standings: {:?}",
+                    game_id,
+                    winner.display_name,
+                    winner.points,
+                    final_scores.iter().map(|p| format!("{}: {}", p.display_name, p.points)).collect::<Vec<_>>()
+                );
+                
                 let message = ServerMessage::GameOver {
-                    winner,
-                    final_scores,
+                    winner: winner.clone(),
+                    final_scores: final_scores.clone(),
                 };
                 self.connection_manager.send_to_game(game_id, message).await;
 
@@ -392,8 +418,7 @@ impl MessageHandler {
                 }
             }
             GameEvent::StateUpdate { state } => {
-                let message = ServerMessage::GameStateUpdate { state };
-                self.connection_manager.send_to_game(game_id, message).await;
+                self.connection_manager.send_personalized_game_state(game_id, &state).await;
             }
         }
 
@@ -493,19 +518,24 @@ impl MessageHandler {
                             warn!("Failed to notify player {} of match: {}", player_id, e);
                         }
 
-                        // Send initial game state
+                        // Send personalized initial game state
                         if let Some(ref game_state) = initial_game_state {
-                            if let Err(e) = self
-                                .connection_manager
-                                .send_to_connection(
-                                    player_id,
-                                    ServerMessage::GameStateUpdate {
-                                        state: game_state.clone(),
-                                    },
-                                )
-                                .await
-                            {
-                                warn!("Failed to send initial game state to {}: {}", player_id, e);
+                            if let Some(connection) = self.connection_manager.get_connection(player_id).await {
+                                if let Some(ref user) = connection.user {
+                                    let personalized_state = game_state.personalized_for_player(user.id);
+                                    if let Err(e) = self
+                                        .connection_manager
+                                        .send_to_connection(
+                                            player_id,
+                                            ServerMessage::GameStateUpdate {
+                                                state: personalized_state,
+                                            },
+                                        )
+                                        .await
+                                    {
+                                        warn!("Failed to send initial game state to {}: {}", player_id, e);
+                                    }
+                                }
                             }
                         }
                     }

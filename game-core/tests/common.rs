@@ -6,7 +6,7 @@ use uuid::Uuid;
 /// Creates a test WordValidator with a known set of words
 pub fn create_test_validator() -> WordValidator {
     let word_list = "apple\nbanana\ncherry\ntests\nvalid\nhello\nworld\nhouse\nmouse\ntrain\nplane\nwater\nstone\nbread\ncream";
-    WordValidator::new(word_list)
+    WordValidator::from_word_list(word_list)
 }
 
 /// Creates a test player with specified attributes

@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
-import { GameBoardContainer } from './GameBoard';
-import { GuessInputContainer } from './GuessInput';
-import { PlayerListContainer } from './PlayerList';
-import { GuessHistoryContainer } from './GuessHistory';
-import { CountdownTimerContainer } from './CountdownTimer';
+import React, { useState } from "react";
+import { GameBoardContainer } from "./GameBoard";
+import { GuessInputContainer } from "./GuessInput";
+import { PlayerListContainer } from "./PlayerList";
+import { GuessHistoryContainer } from "./GuessHistory";
+import { CountdownTimerContainer } from "./CountdownTimer";
 
-export const GameLayout: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'players' | 'history'>('players');
+interface GameLayoutProps {
+  isRejoining?: boolean;
+}
+
+export const GameLayout: React.FC<GameLayoutProps> = ({ isRejoining = false }) => {
+  const [activeTab, setActiveTab] = useState<"players" | "history">("players");
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -32,7 +36,7 @@ export const GameLayout: React.FC = () => {
 
             {/* Guess Input */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <GuessInputContainer />
+              <GuessInputContainer isRejoining={isRejoining} />
             </div>
           </div>
 
@@ -63,7 +67,7 @@ export const GameLayout: React.FC = () => {
 
             {/* Guess Input */}
             <div className="bg-white rounded-lg shadow-md p-6">
-              <GuessInputContainer />
+              <GuessInputContainer isRejoining={isRejoining} />
             </div>
 
             {/* Guess History */}
@@ -94,22 +98,22 @@ export const GameLayout: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md">
             <div className="flex border-b">
               <button
-                onClick={() => setActiveTab('players')}
+                onClick={() => setActiveTab("players")}
                 className={`flex-1 py-3 px-4 font-semibold transition-colors ${
-                  activeTab === 'players'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                  activeTab === "players"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
                 data-testid="players-tab"
               >
                 Players
               </button>
               <button
-                onClick={() => setActiveTab('history')}
+                onClick={() => setActiveTab("history")}
                 className={`flex-1 py-3 px-4 font-semibold transition-colors ${
-                  activeTab === 'history'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
+                  activeTab === "history"
+                    ? "text-blue-600 border-b-2 border-blue-600"
+                    : "text-gray-600 hover:text-gray-800"
                 }`}
                 data-testid="history-tab"
               >
@@ -117,7 +121,7 @@ export const GameLayout: React.FC = () => {
               </button>
             </div>
             <div className="p-4">
-              {activeTab === 'players' ? (
+              {activeTab === "players" ? (
                 <PlayerListContainer />
               ) : (
                 <GuessHistoryContainer />

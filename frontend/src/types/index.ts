@@ -1,5 +1,5 @@
 // Re-export generated types
-export * from './generated';
+export * from "./generated";
 
 // Additional frontend-specific types
 export interface WebSocketState {
@@ -18,4 +18,4 @@ export interface AuthState {
 }
 
 // Import User type for reference
-import type { User } from './generated';
+import type { User } from "./generated";

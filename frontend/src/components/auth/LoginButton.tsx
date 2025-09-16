@@ -1,15 +1,17 @@
-import { useAuth } from './AuthProvider'
-import { DevLoginForm } from './DevLoginForm'
+import { useAuth } from "./AuthProvider";
+import { DevLoginForm } from "./DevLoginForm";
 
 export function LoginButton() {
-  const { isAuthenticated, user, login, logout, isDevMode } = useAuth()
+  const { isAuthenticated, user, login, logout, isDevMode } = useAuth();
 
   if (isAuthenticated && user) {
     return (
       <div className="flex items-center space-x-4">
         <span className="text-sm text-gray-600">
           Welcome, {user.display_name}
-          {isDevMode && <span className="ml-1 text-xs text-yellow-600">(dev)</span>}
+          {isDevMode && (
+            <span className="ml-1 text-xs text-yellow-600">(dev)</span>
+          )}
         </span>
         <button
           onClick={logout}
@@ -18,12 +20,12 @@ export function LoginButton() {
           Sign Out
         </button>
       </div>
-    )
+    );
   }
 
   // In dev mode, show the dev login form instead of Microsoft login
   if (isDevMode) {
-    return <DevLoginForm />
+    return <DevLoginForm />;
   }
 
   return (
@@ -33,5 +35,5 @@ export function LoginButton() {
     >
       Sign in with Microsoft
     </button>
-  )
+  );
 }

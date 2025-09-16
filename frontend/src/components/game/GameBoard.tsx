@@ -1,5 +1,5 @@
-import React from 'react';
-import type { GuessResult, LetterStatus } from '../../types/generated';
+import React from "react";
+import type { GuessResult, LetterStatus } from "../../types/generated";
 
 interface GameBoardProps {
   guesses: GuessResult[];
@@ -11,23 +11,23 @@ interface GameBoardProps {
 
 interface LetterTileProps {
   letter: string;
-  status: LetterStatus | 'empty' | 'pending';
+  status: LetterStatus | "empty" | "pending";
 }
 
 const LetterTile: React.FC<LetterTileProps> = ({ letter, status }) => {
   const getStatusClasses = () => {
     switch (status) {
-      case 'Correct':
-        return 'bg-blue-500 text-white border-blue-600';
-      case 'Present':
-        return 'bg-orange-500 text-white border-orange-600';
-      case 'Absent':
-        return 'bg-gray-500 text-white border-gray-600';
-      case 'pending':
-        return 'bg-white text-gray-900 border-gray-400 animate-pulse';
-      case 'empty':
+      case "Correct":
+        return "bg-blue-500 text-white border-blue-600";
+      case "Present":
+        return "bg-orange-500 text-white border-orange-600";
+      case "Absent":
+        return "bg-gray-500 text-white border-gray-600";
+      case "pending":
+        return "bg-white text-gray-900 border-gray-400 animate-pulse";
+      case "empty":
       default:
-        return 'bg-white border-gray-300';
+        return "bg-white border-gray-300";
     }
   };
 
@@ -52,12 +52,17 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   guesses,
   wordLength,
   maxGuesses = 6,
-  currentGuess = '',
+  currentGuess = "",
   isCurrentPlayer = false,
 }) => {
   // Create rows for the board
-  const rows: Array<{ letters: Array<{ letter: string; status: LetterStatus | 'empty' | 'pending' }> }> = [];
-  
+  const rows: Array<{
+    letters: Array<{
+      letter: string;
+      status: LetterStatus | "empty" | "pending";
+    }>;
+  }> = [];
+
   // Add completed guesses
   guesses.forEach((guess) => {
     const letters = guess.letters.map((letterResult) => ({
@@ -66,28 +71,33 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     }));
     rows.push({ letters });
   });
-  
+
   // Add current guess if player is actively guessing
   if (isCurrentPlayer && currentGuess && rows.length < maxGuesses) {
-    const currentLetters: { letter: string; status: LetterStatus | 'empty' | 'pending' }[] = currentGuess.split('').map((letter) => ({
+    const currentLetters: {
+      letter: string;
+      status: LetterStatus | "empty" | "pending";
+    }[] = currentGuess.split("").map((letter) => ({
       letter,
-      status: 'pending' as const,
+      status: "pending" as const,
     }));
-    
+
     // Pad with empty tiles
     while (currentLetters.length < wordLength) {
-      currentLetters.push({ letter: '', status: 'empty' as const });
+      currentLetters.push({ letter: "", status: "empty" as const });
     }
-    
+
     rows.push({ letters: currentLetters });
   }
-  
+
   // Fill remaining rows with empty tiles
   while (rows.length < maxGuesses) {
-    const emptyLetters = Array(wordLength).fill(null).map(() => ({
-      letter: '',
-      status: 'empty' as const,
-    }));
+    const emptyLetters = Array(wordLength)
+      .fill(null)
+      .map(() => ({
+        letter: "",
+        status: "empty" as const,
+      }));
     rows.push({ letters: emptyLetters });
   }
 
@@ -120,7 +130,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
 // Container component that connects to store
 export const GameBoardContainer: React.FC = () => {
   const { gameState, currentGuess } = useGameStore();
-  
+
   if (!gameState) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -128,16 +138,16 @@ export const GameBoardContainer: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <GameBoard
       guesses={gameState.official_board}
       wordLength={gameState.word_length}
       currentGuess={currentGuess}
-      isCurrentPlayer={true} // TODO: determine from game state
+      isCurrentPlayer={gameState.current_phase === "Guessing"}
     />
   );
 };
 
 // Import store (will be at top of file in final version)
-import { useGameStore } from '../../store/gameStore';
+import { useGameStore } from "../../store/gameStore";

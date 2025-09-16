@@ -1,5 +1,5 @@
-import React from 'react';
-import type { Player } from '../../types/generated';
+import React from "react";
+import type { Player } from "../../types/generated";
 
 interface PlayerListProps {
   players: Player[];
@@ -23,14 +23,17 @@ const PlayerItem: React.FC<PlayerItemProps> = ({
   pointThreshold,
   rank,
 }) => {
-  const progressPercentage = Math.min((player.points / pointThreshold) * 100, 100);
+  const progressPercentage = Math.min(
+    (player.points / pointThreshold) * 100,
+    100,
+  );
 
   return (
     <div
       className={`
         relative p-3 rounded-lg transition-all duration-200
-        ${isCurrentPlayer ? 'bg-blue-50 border-2 border-blue-300' : 'bg-white border border-gray-200'}
-        ${isCurrentWinner ? 'ring-2 ring-orange-400' : ''}
+        ${isCurrentPlayer ? "bg-blue-50 border-2 border-blue-300" : "bg-white border border-gray-200"}
+        ${isCurrentWinner ? "ring-2 ring-orange-400" : ""}
       `}
       data-testid={`player-item-${player.user_id}`}
     >
@@ -41,10 +44,10 @@ const PlayerItem: React.FC<PlayerItemProps> = ({
           <span
             className={`
               text-sm font-bold w-6 h-6 rounded-full flex items-center justify-center
-              ${rank === 1 ? 'bg-yellow-400 text-white' : ''}
-              ${rank === 2 ? 'bg-gray-400 text-white' : ''}
-              ${rank === 3 ? 'bg-orange-600 text-white' : ''}
-              ${rank > 3 ? 'bg-gray-200 text-gray-700' : ''}
+              ${rank === 1 ? "bg-yellow-400 text-white" : ""}
+              ${rank === 2 ? "bg-gray-400 text-white" : ""}
+              ${rank === 3 ? "bg-orange-600 text-white" : ""}
+              ${rank > 3 ? "bg-gray-200 text-gray-700" : ""}
             `}
           >
             {rank}
@@ -71,7 +74,7 @@ const PlayerItem: React.FC<PlayerItemProps> = ({
         <div
           className={`
             h-full transition-all duration-500 ease-out
-            ${progressPercentage >= 100 ? 'bg-green-500' : 'bg-blue-500'}
+            ${progressPercentage >= 100 ? "bg-green-500" : "bg-blue-500"}
           `}
           style={{ width: `${progressPercentage}%` }}
           data-testid="progress-bar"
@@ -81,7 +84,10 @@ const PlayerItem: React.FC<PlayerItemProps> = ({
       {/* Connection Status */}
       {!player.is_connected && (
         <div className="absolute top-1 right-1">
-          <div className="w-2 h-2 bg-red-500 rounded-full" title="Disconnected" />
+          <div
+            className="w-2 h-2 bg-red-500 rounded-full"
+            title="Disconnected"
+          />
         </div>
       )}
 
@@ -143,11 +149,7 @@ export const PlayerListContainer: React.FC = () => {
   const { user } = useAuthStore();
 
   if (!gameState) {
-    return (
-      <div className="text-center py-8 text-gray-500">
-        No active game
-      </div>
-    );
+    return <div className="text-center py-8 text-gray-500">No active game</div>;
   }
 
   return (
@@ -161,5 +163,5 @@ export const PlayerListContainer: React.FC = () => {
 };
 
 // Imports (will be at top in final version)
-import { useGameStore } from '../../store/gameStore';
-import { useAuthStore } from '../../store/authStore';
+import { useGameStore } from "../../store/gameStore";
+import { useAuthStore } from "../../store/authStore";

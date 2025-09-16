@@ -1,5 +1,7 @@
-import React from 'react';
-import type { PersonalGuess } from '../../types/generated';
+import React from "react";
+import type { PersonalGuess } from "../../types/generated";
+import { useGameStore } from "../../store/gameStore";
+import { useAuthStore } from "../../store/authStore";
 
 interface GuessHistoryProps {
   guesses: PersonalGuess[];
@@ -14,10 +16,10 @@ interface GuessItemProps {
 const GuessItem: React.FC<GuessItemProps> = ({ guess, index }) => {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      second: '2-digit'
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
     });
   };
 
@@ -25,9 +27,10 @@ const GuessItem: React.FC<GuessItemProps> = ({ guess, index }) => {
     <div
       className={`
         p-3 rounded-lg border transition-all duration-200
-        ${guess.was_winning_guess 
-          ? 'bg-green-50 border-green-300' 
-          : 'bg-white border-gray-200 hover:bg-gray-50'
+        ${
+          guess.was_winning_guess
+            ? "bg-green-50 border-green-300"
+            : "bg-white border-gray-200 hover:bg-gray-50"
         }
       `}
       data-testid={`guess-item-${index}`}
@@ -67,14 +70,14 @@ const GuessItem: React.FC<GuessItemProps> = ({ guess, index }) => {
   );
 };
 
-export const GuessHistory: React.FC<GuessHistoryProps> = ({ 
-  guesses, 
-  currentRound 
+export const GuessHistory: React.FC<GuessHistoryProps> = ({
+  guesses,
+  currentRound,
 }) => {
   // Group guesses by round (assuming guesses are in chronological order)
   const guessesByRound: PersonalGuess[][] = [];
   let currentRoundGuesses: PersonalGuess[] = [];
-  
+
   guesses.forEach((guess) => {
     currentRoundGuesses.push(guess);
     if (guess.was_winning_guess) {
@@ -82,13 +85,16 @@ export const GuessHistory: React.FC<GuessHistoryProps> = ({
       currentRoundGuesses = [];
     }
   });
-  
+
   // Add any remaining guesses for the current round
   if (currentRoundGuesses.length > 0) {
     guessesByRound.push(currentRoundGuesses);
   }
 
-  const totalPoints = guesses.reduce((sum, guess) => sum + guess.points_earned, 0);
+  const totalPoints = guesses.reduce(
+    (sum, guess) => sum + guess.points_earned,
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-3" data-testid="guess-history">
@@ -139,7 +145,7 @@ export const GuessHistory: React.FC<GuessHistoryProps> = ({
             <div>
               <span className="text-gray-500">Winning:</span>
               <span className="ml-2 font-semibold">
-                {guesses.filter(g => g.was_winning_guess).length}
+                {guesses.filter((g) => g.was_winning_guess).length}
               </span>
             </div>
             <div>
@@ -161,29 +167,37 @@ export const GuessHistory: React.FC<GuessHistoryProps> = ({
 
 // Container component that connects to store
 export const GuessHistoryContainer: React.FC = () => {
-  const { gameState } = useGameStore();
+  const { gameState, personalGuessHistory } = useGameStore();
   const { user } = useAuthStore();
 
-  if (!gameState || !user) {
+  // Debug logging
+  console.log("GuessHistoryContainer debug:", {
+    gameState: gameState ? "present" : "null",
+    user: user ? `id: ${user.id}` : "null",
+    players: gameState?.players?.length || 0,
+    personalGuessHistory: personalGuessHistory?.length || 0,
+  });
+
+  if (!gameState) {
     return (
       <div className="text-center py-8 text-gray-500">
         No active game
+        <div className="text-xs mt-2">
+          Debug: gameState={gameState ? "✓" : "✗"}, user={user ? "✓" : "✗"}
+        </div>
       </div>
     );
   }
 
-  // Find the current player's guess history
-  const currentPlayer = gameState.players.find(p => p.user_id === user.id);
-  const guesses = currentPlayer?.guess_history || [];
+  // Find the current player's guess history from game state
+  const currentPlayer = gameState.players.find((p) => p.user_id === user?.id);
+  const serverGuesses = currentPlayer?.guess_history || [];
+  
+  // Use server guess history if available, otherwise fall back to local history
+  const guesses = serverGuesses.length > 0 ? serverGuesses : personalGuessHistory;
 
   return (
-    <GuessHistory
-      guesses={guesses}
-      currentRound={gameState.current_round}
-    />
+    <GuessHistory guesses={guesses} currentRound={gameState.current_round} />
   );
 };
 
-// Imports (will be at top in final version)
-import { useGameStore } from '../../store/gameStore';
-import { useAuthStore } from '../../store/authStore';
