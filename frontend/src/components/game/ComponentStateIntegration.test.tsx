@@ -23,10 +23,12 @@ vi.mock("./GameNotFound", () => ({
   GameNotFound: () => <div data-testid="game-not-found">Game Not Found</div>,
 }));
 
+// Create mock functions that can be accessed in tests
+const mockNavigate = vi.fn();
+const mockUseParams = vi.fn(() => ({ gameId: "test-game-123" }));
+
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
-  const mockNavigate = vi.fn();
-  const mockUseParams = vi.fn(() => ({ gameId: "test-game-123" }));
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -36,10 +38,6 @@ vi.mock("react-router-dom", async () => {
 
 const mockUseWebSocket = vi.mocked(useWebSocket);
 const mockUseGameStore = vi.mocked(useGameStore);
-
-// Create mock functions that can be accessed in tests
-const mockNavigate = vi.fn();
-const mockUseParams = vi.fn(() => ({ gameId: "test-game-123" }));
 
 describe("Game Component State Integration", () => {
   let messageHandlers: Set<(message: ServerMessage) => void>;

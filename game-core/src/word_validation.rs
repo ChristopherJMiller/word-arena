@@ -106,13 +106,13 @@ impl WordValidator {
         word.chars().all(|c| c.is_alphabetic())
     }
 
-    /// Get a random word with random length between 5-8 letters
+    /// Get a random word with random length between 5-7 letters
     pub fn get_random_word_random_length(&self) -> Result<String> {
-        // Simple random length selection (5-8)
+        // Simple random length selection (5-7)
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         use std::hash::{Hash, Hasher};
         std::time::SystemTime::now().hash(&mut hasher);
-        let random_length = 5 + ((hasher.finish() as usize) % 4); // 5-8
+        let random_length = 5 + ((hasher.finish() as usize) % 3); // 5-7
         
         self.get_random_word(random_length)
     }
@@ -272,7 +272,7 @@ mod tests {
         // Test that random length returns valid words
         for _ in 0..20 {
             let word = validator.get_random_word_random_length().unwrap();
-            assert!(word.len() >= 5 && word.len() <= 8);
+            assert!(word.len() >= 5 && word.len() <= 7);
             assert!(validator.is_valid_word(&word));
         }
     }

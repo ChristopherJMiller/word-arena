@@ -39,7 +39,7 @@ async fn setup_authenticated_connections(
 #[tokio::test]
 async fn test_create_game_with_authenticated_users() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create two authenticated users
     let connections = setup_authenticated_connections(
@@ -80,7 +80,7 @@ async fn test_create_game_with_authenticated_users() {
 #[tokio::test]
 async fn test_create_game_with_unauthenticated_users() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create unauthenticated connections
     let connection_id1 = ConnectionId::new();
@@ -98,7 +98,7 @@ async fn test_create_game_with_unauthenticated_users() {
 #[tokio::test]
 async fn test_create_game_with_partially_authenticated_users() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create one authenticated and one unauthenticated connection
     let connections = setup_authenticated_connections(
@@ -120,7 +120,7 @@ async fn test_create_game_with_partially_authenticated_users() {
 #[tokio::test]
 async fn test_create_game_with_duplicate_users() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create two connections for the same user (should not be possible in normal flow,
     // but we're testing the validation)
@@ -153,7 +153,7 @@ async fn test_create_game_with_duplicate_users() {
 #[tokio::test]
 async fn test_create_game_with_nonexistent_connections() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create random connection IDs that don't exist
     let connection_id1 = ConnectionId::new();
@@ -169,7 +169,7 @@ async fn test_create_game_with_nonexistent_connections() {
 #[tokio::test]
 async fn test_create_game_with_insufficient_players() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create one authenticated user
     let connections = setup_authenticated_connections(
@@ -188,7 +188,7 @@ async fn test_create_game_with_insufficient_players() {
 #[tokio::test]
 async fn test_submit_guess_validates_user_identity() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create two authenticated users
     let connections = setup_authenticated_connections(
@@ -222,7 +222,7 @@ async fn test_submit_guess_validates_user_identity() {
 #[tokio::test]
 async fn test_is_user_in_game_validates_correctly() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create two authenticated users
     let connections = setup_authenticated_connections(
@@ -256,7 +256,7 @@ async fn test_is_user_in_game_validates_correctly() {
 #[tokio::test]
 async fn test_security_user_cannot_access_other_game() {
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = GameManager::new(connection_manager.clone());
+    let game_manager = GameManager::new(connection_manager.clone(), "../word_lists").unwrap();
     
     // Create four users for two separate games
     let connections1 = setup_authenticated_connections(

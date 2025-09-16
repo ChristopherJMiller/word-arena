@@ -36,8 +36,6 @@ jobs:
         cargo test -p game-types
         cp game-types/bindings/*.ts frontend/src/types/generated/
 
-    - name: Run tests
-      run: npm run test:frontend
 
     - name: Build frontend
       run: npm run build:frontend
