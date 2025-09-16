@@ -20,24 +20,50 @@ pub enum ClientMessage {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum ServerMessage {
-    AuthenticationSuccess { user: crate::User },
-    AuthenticationFailed { reason: String },
-    QueueJoined { position: u32 },
+    AuthenticationSuccess {
+        user: crate::User,
+    },
+    AuthenticationFailed {
+        reason: String,
+    },
+    QueueJoined {
+        position: u32,
+    },
     QueueLeft,
-    MatchmakingCountdown { seconds_remaining: u32, players_ready: u32, total_players: u32 },
-    MatchFound { game_id: String, players: Vec<Player> },
-    GameStateUpdate { state: GameState },
-    CountdownStart { seconds: u32 },
+    MatchmakingCountdown {
+        seconds_remaining: u32,
+        players_ready: u32,
+        total_players: u32,
+    },
+    MatchFound {
+        game_id: String,
+        players: Vec<Player>,
+    },
+    GameStateUpdate {
+        state: GameState,
+    },
+    CountdownStart {
+        seconds: u32,
+    },
     RoundResult {
         winning_guess: GuessResult,
         your_guess: Option<PersonalGuess>,
         next_phase: GamePhase,
     },
-    GameOver { winner: Player, final_scores: Vec<Player> },
+    GameOver {
+        winner: Player,
+        final_scores: Vec<Player>,
+    },
     GameLeft,
-    PlayerDisconnected { player_id: Uuid },
-    PlayerReconnected { player_id: Uuid },
-    Error { message: String },
+    PlayerDisconnected {
+        player_id: Uuid,
+    },
+    PlayerReconnected {
+        player_id: Uuid,
+    },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

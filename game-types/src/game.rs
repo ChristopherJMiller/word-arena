@@ -16,7 +16,7 @@ pub struct GameState {
     pub players: Vec<Player>,
     pub official_board: Vec<GuessResult>,
     pub current_winner: Option<Uuid>,
-    pub created_at: String, // ISO 8601 string
+    pub created_at: String,   // ISO 8601 string
     pub point_threshold: i32, // Configurable win condition
 }
 
@@ -57,13 +57,13 @@ impl From<&GameState> for SafeGameState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum GameStatus {
-    Queuing,           // Players in matchmaking
-    Starting,          // Game created, waiting for players to connect
-    Active,            // Game in progress
-    Paused,            // Temporarily paused (disconnections)
-    Completed,         // Game finished normally
-    Abandoned,         // Game abandoned due to disconnections
-    TimedOut,          // Game exceeded maximum duration
+    Queuing,   // Players in matchmaking
+    Starting,  // Game created, waiting for players to connect
+    Active,    // Game in progress
+    Paused,    // Temporarily paused (disconnections)
+    Completed, // Game finished normally
+    Abandoned, // Game abandoned due to disconnections
+    TimedOut,  // Game exceeded maximum duration
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -97,7 +97,7 @@ pub struct LetterResult {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub enum LetterStatus {
-    Correct,  // Blue - correct letter in correct position
-    Present,  // Orange - correct letter in wrong position
-    Absent,   // Gray - letter not in word
+    Correct, // Blue - correct letter in correct position
+    Present, // Orange - correct letter in wrong position
+    Absent,  // Gray - letter not in word
 }

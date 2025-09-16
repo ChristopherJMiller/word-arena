@@ -1,5 +1,5 @@
+use anyhow::{Result, anyhow};
 use std::collections::HashSet;
-use anyhow::{anyhow, Result};
 
 pub struct WordValidator {
     valid_words: HashSet<String>,
@@ -26,7 +26,8 @@ impl WordValidator {
 
     /// Get a random word of the specified length
     pub fn get_random_word(&self, length: usize) -> Result<String> {
-        let words_of_length: Vec<&String> = self.valid_words
+        let words_of_length: Vec<&String> = self
+            .valid_words
             .iter()
             .filter(|word| word.len() == length)
             .collect();
@@ -117,10 +118,15 @@ mod tests {
         let validator = WordValidator::new("");
         assert!(!validator.is_valid_word("hello"));
         assert_eq!(validator.word_count_by_length(5), 0);
-        
+
         let result = validator.get_random_word(5);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No words available"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No words available")
+        );
     }
 
     #[test]
@@ -137,7 +143,7 @@ mod tests {
     #[test]
     fn test_invalid_characters() {
         let validator = WordValidator::new("test");
-        
+
         // Numbers
         assert!(!validator.is_alphabetic("test123"));
         assert!(!validator.is_alphabetic("123test"));

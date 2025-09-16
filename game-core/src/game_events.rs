@@ -111,9 +111,7 @@ mod tests {
 
     impl TestHandler {
         fn new() -> Self {
-            Self {
-                events: Vec::new(),
-            }
+            Self { events: Vec::new() }
         }
     }
 
@@ -127,7 +125,7 @@ mod tests {
     fn test_event_bus() {
         let mut bus = GameEventBus::new();
         let mut handler = TestHandler::new();
-        
+
         let game_id = Uuid::new_v4();
         let event = GameEvent::GameCreated {
             game_id,
@@ -139,7 +137,7 @@ mod tests {
         bus.add_handler(Box::new(handler));
         bus.publish(event.clone());
 
-        // Note: This test is simplified - in practice you'd need to extract 
+        // Note: This test is simplified - in practice you'd need to extract
         // the handler to check its state, or use interior mutability
     }
 }

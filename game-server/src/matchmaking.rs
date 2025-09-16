@@ -76,7 +76,7 @@ impl MatchmakingQueue {
         positions.insert(connection_id, queue.len() - 1);
 
         let position = queue.len() as u32;
-        
+
         // Start countdown if we reach minimum players for the first time
         if queue.len() == self.min_players {
             let mut countdown_started = self.countdown_started_at.write().await;
@@ -118,7 +118,11 @@ impl MatchmakingQueue {
                     let mut countdown_started = self.countdown_started_at.write().await;
                     if countdown_started.is_some() {
                         *countdown_started = None;
-                        info!("Countdown stopped: not enough players ({}/{})", queue.len(), self.min_players);
+                        info!(
+                            "Countdown stopped: not enough players ({}/{})",
+                            queue.len(),
+                            self.min_players
+                        );
                     }
                     votes.clear(); // Clear all votes when countdown stops
                 }
@@ -146,10 +150,10 @@ impl MatchmakingQueue {
         // Check if countdown is active and whether we should actually create the match
         let countdown_started = self.countdown_started_at.read().await;
         let votes = self.votes_to_start.read().await;
-        
+
         let should_create_match = if let Some(started_at) = *countdown_started {
             let elapsed = Instant::now().duration_since(started_at);
-            
+
             // Only create match if countdown has expired OR enough votes
             if elapsed >= self.countdown_duration {
                 true // Countdown expired
@@ -163,11 +167,11 @@ impl MatchmakingQueue {
             // No countdown active, don't create match
             false
         };
-        
+
         if !should_create_match {
             return Ok(None);
         }
-        
+
         // Release the read locks before getting write locks
         drop(countdown_started);
         drop(votes);
@@ -221,7 +225,7 @@ impl MatchmakingQueue {
 
         if let Some(started_at) = *countdown_started {
             let elapsed = Instant::now().duration_since(started_at);
-            
+
             // Check if countdown has expired
             if elapsed >= self.countdown_duration {
                 return true;
@@ -262,8 +266,13 @@ impl MatchmakingQueue {
         let votes_needed = ((total_players as f64 * 0.6).ceil() as usize).max(1);
         let has_enough_votes = votes.len() >= votes_needed;
 
-        info!("Player {} voted to start. Votes: {}/{} (need {})", 
-              connection_id, votes.len(), total_players, votes_needed);
+        info!(
+            "Player {} voted to start. Votes: {}/{} (need {})",
+            connection_id,
+            votes.len(),
+            total_players,
+            votes_needed
+        );
 
         Ok(has_enough_votes)
     }
@@ -276,7 +285,7 @@ impl MatchmakingQueue {
         if let Some(started_at) = *countdown_started {
             let elapsed = Instant::now().duration_since(started_at);
             let remaining = self.countdown_duration.saturating_sub(elapsed);
-            
+
             Some(CountdownInfo {
                 seconds_remaining: remaining.as_secs() as u32,
                 players_ready: votes.len() as u32,
@@ -384,7 +393,7 @@ mod tests {
         players.push(conn_id2);
 
         assert_eq!(queue.get_queue_length().await, 2);
-        
+
         // Countdown should be active but match should not start immediately
         let countdown_info = queue.get_countdown_info().await;
         assert!(countdown_info.is_some());
@@ -416,7 +425,7 @@ mod tests {
         // Now we can create the match
         let match_result = queue.try_create_match().await.unwrap();
         assert!(match_result.is_some());
-        
+
         let match_info = match_result.unwrap();
         assert_eq!(match_info.players.len(), 2);
         assert!(match_info.players.contains(&conn_id1));
@@ -457,7 +466,7 @@ mod tests {
     #[tokio::test]
     async fn test_countdown_info() {
         let queue = MatchmakingQueue::new();
-        
+
         // No countdown initially
         assert!(queue.get_countdown_info().await.is_none());
 
@@ -470,7 +479,7 @@ mod tests {
         // Should have countdown info now
         let info = queue.get_countdown_info().await;
         assert!(info.is_some());
-        
+
         let info = info.unwrap();
         assert_eq!(info.total_players, 2);
         assert_eq!(info.players_ready, 0); // No votes yet
@@ -617,34 +626,34 @@ mod tests {
     #[tokio::test]
     async fn test_queue_player_tracking() {
         let queue = MatchmakingQueue::new();
-        
+
         // Initially no players
         let players = queue.get_queue_players().await;
         assert_eq!(players.len(), 0);
-        
+
         // Add players and verify they're tracked
         let conn_id1 = ConnectionId::new();
         let conn_id2 = ConnectionId::new();
         let conn_id3 = ConnectionId::new();
-        
+
         queue.add_player(conn_id1).await.unwrap();
         let players = queue.get_queue_players().await;
         assert_eq!(players.len(), 1);
         assert!(players.contains(&conn_id1));
-        
+
         queue.add_player(conn_id2).await.unwrap();
         let players = queue.get_queue_players().await;
         assert_eq!(players.len(), 2);
         assert!(players.contains(&conn_id1));
         assert!(players.contains(&conn_id2));
-        
+
         queue.add_player(conn_id3).await.unwrap();
         let players = queue.get_queue_players().await;
         assert_eq!(players.len(), 3);
         assert!(players.contains(&conn_id1));
         assert!(players.contains(&conn_id2));
         assert!(players.contains(&conn_id3));
-        
+
         // Remove player and verify they're no longer tracked
         queue.remove_player(conn_id2).await.unwrap();
         let players = queue.get_queue_players().await;
@@ -652,7 +661,7 @@ mod tests {
         assert!(players.contains(&conn_id1));
         assert!(!players.contains(&conn_id2));
         assert!(players.contains(&conn_id3));
-        
+
         // Cleanup
         queue.remove_player(conn_id1).await.ok();
         queue.remove_player(conn_id3).await.ok();
@@ -661,55 +670,55 @@ mod tests {
     #[tokio::test]
     async fn test_countdown_broadcast_to_all_players() {
         let queue = MatchmakingQueue::new();
-        
+
         // Add first player - no countdown yet
         let conn_id1 = ConnectionId::new();
         queue.add_player(conn_id1).await.unwrap();
-        
+
         let countdown_info = queue.get_countdown_info().await;
         assert!(countdown_info.is_none());
-        
+
         // Add second player - countdown should start
         let conn_id2 = ConnectionId::new();
         queue.add_player(conn_id2).await.unwrap();
-        
+
         // Verify countdown is active
         let countdown_info = queue.get_countdown_info().await;
         assert!(countdown_info.is_some());
         let info = countdown_info.unwrap();
         assert_eq!(info.total_players, 2);
         assert_eq!(info.players_ready, 0); // No votes yet
-        
+
         // Verify both players are in queue for broadcasting
         let queue_players = queue.get_queue_players().await;
         assert_eq!(queue_players.len(), 2);
         assert!(queue_players.contains(&conn_id1));
         assert!(queue_players.contains(&conn_id2));
-        
+
         // Add third player
         let conn_id3 = ConnectionId::new();
         queue.add_player(conn_id3).await.unwrap();
-        
+
         // Verify all three players would receive countdown broadcast
         let queue_players = queue.get_queue_players().await;
         assert_eq!(queue_players.len(), 3);
         assert!(queue_players.contains(&conn_id1));
         assert!(queue_players.contains(&conn_id2));
         assert!(queue_players.contains(&conn_id3));
-        
+
         // Verify countdown info reflects all players
         let countdown_info = queue.get_countdown_info().await.unwrap();
         assert_eq!(countdown_info.total_players, 3);
-        
+
         // Test voting updates the broadcast info
         queue.vote_to_start(conn_id1).await.unwrap();
         let countdown_info = queue.get_countdown_info().await.unwrap();
         assert_eq!(countdown_info.players_ready, 1);
-        
+
         queue.vote_to_start(conn_id2).await.unwrap();
         let countdown_info = queue.get_countdown_info().await.unwrap();
         assert_eq!(countdown_info.players_ready, 2);
-        
+
         // Cleanup
         queue.remove_player(conn_id1).await.ok();
         queue.remove_player(conn_id2).await.ok();

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -14,13 +14,13 @@ use game_types::User;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MicrosoftJwtClaims {
-    pub aud: String,           // Audience
-    pub iss: String,           // Issuer
-    pub iat: u64,              // Issued at
-    pub exp: u64,              // Expiry
-    pub sub: String,           // Subject (user ID)
-    pub email: String,         // User email
-    pub name: String,          // Display name
+    pub aud: String,                // Audience
+    pub iss: String,                // Issuer
+    pub iat: u64,                   // Issued at
+    pub exp: u64,                   // Expiry
+    pub sub: String,                // Subject (user ID)
+    pub email: String,              // User email
+    pub name: String,               // Display name
     pub preferred_username: String, // Username
 }
 
@@ -86,7 +86,10 @@ impl AuthService {
         // Validate the token
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[&self.client_id]);
-        validation.set_issuer(&[&format!("https://login.microsoftonline.com/{}/v2.0", self.tenant_id)]);
+        validation.set_issuer(&[&format!(
+            "https://login.microsoftonline.com/{}/v2.0",
+            self.tenant_id
+        )]);
 
         let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
             .map_err(|_| AuthError::InvalidToken)?;
@@ -98,7 +101,7 @@ impl AuthService {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         if claims.exp < now {
             return Err(AuthError::TokenExpired);
         }
@@ -121,7 +124,9 @@ impl AuthService {
             let cache = self.jwks_cache.read().await;
             if let Some((key, cached_time)) = cache.get(kid) {
                 // Cache for 1 hour
-                if cached_time.elapsed().unwrap_or(Duration::from_secs(3600)) < Duration::from_secs(3600) {
+                if cached_time.elapsed().unwrap_or(Duration::from_secs(3600))
+                    < Duration::from_secs(3600)
+                {
                     return Ok(key.clone());
                 }
             }
@@ -157,7 +162,9 @@ impl AuthService {
             DecodingKey::from_rsa_components(n, e).map_err(|_| AuthError::InvalidKey)?
         } else if let Some(x5c) = &jwks_key.x5c {
             if let Some(cert) = x5c.first() {
-                let cert_der = base64::engine::general_purpose::STANDARD.decode(cert).map_err(|_| AuthError::InvalidKey)?;
+                let cert_der = base64::engine::general_purpose::STANDARD
+                    .decode(cert)
+                    .map_err(|_| AuthError::InvalidKey)?;
                 // from_rsa_der doesn't return a Result, it's infallible for valid DER
                 DecodingKey::from_rsa_der(&cert_der)
             } else {
@@ -179,34 +186,34 @@ impl AuthService {
     async fn validate_dev_token(&self, token: &str) -> Result<User, AuthError> {
         // In dev mode, we expect a JWT-like token but we parse it without validation
         // We just decode the payload section and extract the claims
-        
+
         // Check if it looks like a JWT (has 3 parts separated by dots)
         let parts: Vec<&str> = token.split('.').collect();
         if parts.len() == 3 {
             // Decode the payload (second part)
             let payload_b64 = parts[1];
-            
+
             // Add padding if needed for base64 decoding
             let padded_payload = match payload_b64.len() % 4 {
                 0 => payload_b64.to_string(),
                 n => format!("{}{}", payload_b64, "=".repeat(4 - n)),
             };
-            
+
             // Convert URL-safe base64 back to standard base64
             let standard_b64 = padded_payload.replace('-', "+").replace('_', "/");
-            
+
             // Decode base64
-            let payload_bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, standard_b64)
-                .map_err(|_| AuthError::InvalidToken)?;
-            
+            let payload_bytes =
+                base64::Engine::decode(&base64::engine::general_purpose::STANDARD, standard_b64)
+                    .map_err(|_| AuthError::InvalidToken)?;
+
             // Parse as JSON to get claims
-            let claims: MicrosoftJwtClaims = serde_json::from_slice(&payload_bytes)
-                .map_err(|_| AuthError::InvalidToken)?;
-            
+            let claims: MicrosoftJwtClaims =
+                serde_json::from_slice(&payload_bytes).map_err(|_| AuthError::InvalidToken)?;
+
             // Create user from claims (no validation in dev mode)
             Ok(User {
-                id: uuid::Uuid::parse_str(&claims.sub)
-                    .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                id: uuid::Uuid::parse_str(&claims.sub).unwrap_or_else(|_| uuid::Uuid::new_v4()),
                 email: claims.email,
                 display_name: claims.name,
                 total_points: 0,
@@ -225,8 +232,8 @@ impl AuthService {
                     name: String,
                 }
 
-                let claims: DevClaims = serde_json::from_str(token)
-                    .map_err(|_| AuthError::InvalidToken)?;
+                let claims: DevClaims =
+                    serde_json::from_str(token).map_err(|_| AuthError::InvalidToken)?;
 
                 Ok(User {
                     id: uuid::Uuid::parse_str(&claims.user_id)
@@ -290,21 +297,15 @@ mod tests {
 
     #[test]
     fn test_auth_service_creation() {
-        let auth_service = AuthService::new(
-            "test-tenant".to_string(),
-            "test-client".to_string(),
-        );
-        
+        let auth_service = AuthService::new("test-tenant".to_string(), "test-client".to_string());
+
         assert_eq!(auth_service.tenant_id, "test-tenant");
         assert_eq!(auth_service.client_id, "test-client");
     }
 
     #[tokio::test]
     async fn test_invalid_token_validation() {
-        let auth_service = AuthService::new(
-            "test-tenant".to_string(),
-            "test-client".to_string(),
-        );
+        let auth_service = AuthService::new("test-tenant".to_string(), "test-client".to_string());
 
         let result = auth_service.validate_token("invalid-token").await;
         assert!(result.is_err());

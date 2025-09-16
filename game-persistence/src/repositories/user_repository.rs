@@ -1,5 +1,8 @@
 use anyhow::Result;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryOrder, QuerySelect, QueryFilter, ColumnTrait, PaginatorTrait};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    QuerySelect,
+};
 use uuid::Uuid;
 
 use crate::entities::{prelude::*, users};
@@ -42,7 +45,7 @@ impl UserRepository {
             .filter(users::Column::Email.eq(email))
             .one(&self.db)
             .await?;
-            
+
         Ok(user_model.map(Self::model_to_user))
     }
 
@@ -50,7 +53,7 @@ impl UserRepository {
         let now = chrono::Utc::now().into();
         let created_at = chrono::DateTime::parse_from_rfc3339(&user.created_at)
             .unwrap_or_else(|_| chrono::Utc::now().into());
-            
+
         let user_model = users::ActiveModel {
             id: sea_orm::ActiveValue::Set(user.id),
             email: sea_orm::ActiveValue::Set(user.email),
@@ -63,7 +66,7 @@ impl UserRepository {
         };
 
         let saved_model = Users::insert(user_model).exec(&self.db).await?;
-        
+
         // Fetch the created user
         let created_user = Users::find_by_id(saved_model.last_insert_id)
             .one(&self.db)
@@ -73,7 +76,12 @@ impl UserRepository {
         Ok(Self::model_to_user(created_user))
     }
 
-    pub async fn update_user_stats(&self, user_id: Uuid, points_gained: i32, won: bool) -> Result<()> {
+    pub async fn update_user_stats(
+        &self,
+        user_id: Uuid,
+        points_gained: i32,
+        won: bool,
+    ) -> Result<()> {
         let user = Users::find_by_id(user_id)
             .one(&self.db)
             .await?
@@ -115,13 +123,13 @@ impl UserRepository {
 
     pub async fn get_user_rank(&self, user_id: Uuid) -> Result<Option<u32>> {
         let user = Users::find_by_id(user_id).one(&self.db).await?;
-        
+
         if let Some(user_model) = user {
             let users_above = Users::find()
                 .filter(users::Column::TotalPoints.gt(user_model.total_points))
                 .count(&self.db)
                 .await?;
-            
+
             Ok(Some(users_above as u32 + 1))
         } else {
             Ok(None)
@@ -145,7 +153,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_and_find_user() {
         let repo = setup_test_db().await;
-        
+
         let user_id = Uuid::new_v4();
         let user = User {
             id: user_id,
@@ -174,7 +182,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_user_stats() {
         let repo = setup_test_db().await;
-        
+
         let user_id = Uuid::new_v4();
         let user = User {
             id: user_id,
@@ -200,7 +208,7 @@ mod tests {
     #[tokio::test]
     async fn test_leaderboard() {
         let repo = setup_test_db().await;
-        
+
         // Create test users with different scores
         let users = vec![
             User {
@@ -239,17 +247,17 @@ mod tests {
 
         // Get leaderboard
         let leaderboard = repo.get_leaderboard(10).await.unwrap();
-        
+
         assert_eq!(leaderboard.len(), 3);
-        
+
         // Should be ordered by points descending
         assert_eq!(leaderboard[0].user.total_points, 200);
         assert_eq!(leaderboard[0].rank, 1);
         assert_eq!(leaderboard[0].user.display_name, "User Two");
-        
+
         assert_eq!(leaderboard[1].user.total_points, 100);
         assert_eq!(leaderboard[1].rank, 2);
-        
+
         assert_eq!(leaderboard[2].user.total_points, 50);
         assert_eq!(leaderboard[2].rank, 3);
     }
@@ -257,7 +265,7 @@ mod tests {
     #[tokio::test]
     async fn test_user_rank() {
         let repo = setup_test_db().await;
-        
+
         let users = vec![
             User {
                 id: Uuid::new_v4(),
@@ -299,7 +307,7 @@ mod tests {
     #[tokio::test]
     async fn test_leaderboard_limit() {
         let repo = setup_test_db().await;
-        
+
         // Create 5 users
         for i in 1..=5 {
             let user = User {
@@ -317,7 +325,7 @@ mod tests {
         // Get top 3
         let leaderboard = repo.get_leaderboard(3).await.unwrap();
         assert_eq!(leaderboard.len(), 3);
-        
+
         // Should be in descending order by points
         assert_eq!(leaderboard[0].user.total_points, 50);
         assert_eq!(leaderboard[1].user.total_points, 40);

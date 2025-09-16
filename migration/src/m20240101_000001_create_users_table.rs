@@ -11,17 +11,32 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Users::Table)
                     .if_not_exists()
+                    .col(ColumnDef::new(Users::Id).uuid().not_null().primary_key())
                     .col(
-                        ColumnDef::new(Users::Id)
-                            .uuid()
+                        ColumnDef::new(Users::Email)
+                            .string()
                             .not_null()
-                            .primary_key(),
+                            .unique_key(),
                     )
-                    .col(ColumnDef::new(Users::Email).string().not_null().unique_key())
                     .col(ColumnDef::new(Users::DisplayName).string().not_null())
-                    .col(ColumnDef::new(Users::TotalPoints).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::TotalWins).integer().not_null().default(0))
-                    .col(ColumnDef::new(Users::TotalGames).integer().not_null().default(0))
+                    .col(
+                        ColumnDef::new(Users::TotalPoints)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::TotalWins)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .col(
+                        ColumnDef::new(Users::TotalGames)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
                     .col(
                         ColumnDef::new(Users::CreatedAt)
                             .timestamp_with_time_zone()
@@ -49,7 +64,7 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Create index on total_wins for leaderboard queries  
+        // Create index on total_wins for leaderboard queries
         manager
             .create_index(
                 Index::create()

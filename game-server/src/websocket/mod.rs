@@ -1,13 +1,13 @@
-use std::sync::Arc;
-use warp::ws::{Message, WebSocket};
 use futures_util::{SinkExt, StreamExt};
-use tracing::{info, warn, error};
 use serde_json;
+use std::sync::Arc;
+use tracing::{error, info, warn};
+use warp::ws::{Message, WebSocket};
 
-use game_types::ClientMessage;
 use crate::auth::AuthService;
 use crate::game_manager::GameManager;
 use crate::matchmaking::MatchmakingQueue;
+use game_types::ClientMessage;
 
 pub mod connection;
 pub mod handlers;
@@ -16,8 +16,8 @@ pub mod rate_limiter;
 #[cfg(test)]
 pub mod integration_tests;
 
-pub use connection::ConnectionManager;
 use connection::ConnectionId;
+pub use connection::ConnectionManager;
 use handlers::MessageHandler;
 use rate_limiter::RateLimiter;
 
@@ -33,7 +33,7 @@ pub async fn handle_connection(
 
     let (mut ws_sender, mut ws_receiver) = websocket.split();
     let rate_limiter = RateLimiter::new();
-    
+
     // Create connection and get receiver for outgoing messages
     let message_receiver = connection_manager.create_connection(connection_id).await;
 
@@ -51,17 +51,15 @@ pub async fn handle_connection(
         let _connection_manager = connection_manager.clone();
         let message_handler = message_handler.clone();
         let mut rate_limiter = rate_limiter.clone();
-        
+
         async move {
             while let Some(result) = ws_receiver.next().await {
                 match result {
                     Ok(msg) => {
-                        if let Err(e) = handle_message(
-                            msg,
-                            &mut rate_limiter,
-                            &message_handler,
-                            connection_id,
-                        ).await {
+                        if let Err(e) =
+                            handle_message(msg, &mut rate_limiter, &message_handler, connection_id)
+                                .await
+                        {
                             error!("Error handling message for {}: {}", connection_id, e);
                             break;
                         }
@@ -79,7 +77,7 @@ pub async fn handle_connection(
     let outgoing_handler = {
         async move {
             let mut receiver = message_receiver;
-            
+
             while let Some(message) = receiver.recv().await {
                 let json = match serde_json::to_string(&message) {
                     Ok(json) => json,
@@ -88,7 +86,7 @@ pub async fn handle_connection(
                         continue;
                     }
                 };
-                
+
                 if let Err(e) = ws_sender.send(Message::text(json)).await {
                     warn!("Failed to send message to {}: {:?}", connection_id, e);
                     break;
@@ -127,13 +125,15 @@ async fn handle_message(
     }
 
     let text = msg.to_str().map_err(|_| "Invalid text message")?;
-    
+
     // Parse client message
-    let client_message: ClientMessage = serde_json::from_str(text)
-        .map_err(|e| format!("Invalid JSON message: {}", e))?;
+    let client_message: ClientMessage =
+        serde_json::from_str(text).map_err(|e| format!("Invalid JSON message: {}", e))?;
 
     // Handle the message
-    message_handler.handle_message(client_message).await
+    message_handler
+        .handle_message(client_message)
+        .await
         .map_err(|e| format!("Message handling error: {}", e))?;
 
     Ok(())

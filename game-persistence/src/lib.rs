@@ -1,6 +1,6 @@
+pub mod connection;
 pub mod entities;
 pub mod repositories;
-pub mod connection;
 
 use sea_orm::{Database, DatabaseConnection, DbErr};
 
@@ -13,7 +13,7 @@ impl DatabaseManager {
         let connection = Database::connect(database_url).await?;
         Ok(Self { connection })
     }
-    
+
     pub fn get_connection(&self) -> &DatabaseConnection {
         &self.connection
     }

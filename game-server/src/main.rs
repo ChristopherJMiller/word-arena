@@ -2,22 +2,25 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
-use game_server::{auth::AuthService, create_routes, websocket::ConnectionManager, game_manager::GameManager, matchmaking::MatchmakingQueue, config::Config};
-use game_persistence::{repositories::UserRepository, connection::connect_and_migrate};
+use game_persistence::{connection::connect_and_migrate, repositories::UserRepository};
+use game_server::{
+    auth::AuthService, config::Config, create_routes, game_manager::GameManager,
+    matchmaking::MatchmakingQueue, websocket::ConnectionManager,
+};
 
 #[tokio::main]
 async fn main() {
     // Initialize tracing
     tracing_subscriber::fmt::init();
-    
+
     info!("Starting Word Arena server...");
-    
+
     // Initialize application state
     let config = Config::new();
     let connection_manager = Arc::new(ConnectionManager::new());
     let game_manager = Arc::new(GameManager::new());
     let matchmaking_queue = Arc::new(MatchmakingQueue::new());
-    
+
     // Initialize database connection and run migrations
     let db = match connect_and_migrate().await {
         Ok(db) => db,
@@ -27,20 +30,27 @@ async fn main() {
         }
     };
     let user_repository = Arc::new(UserRepository::new(db));
-    
+
     // Check for dev mode
-    let auth_service = if std::env::var("AUTH_DEV_MODE").unwrap_or_else(|_| "false".to_string()) == "true" {
-        info!("Starting in development authentication mode - JWT validation disabled");
-        Arc::new(AuthService::new_dev_mode())
-    } else {
-        Arc::new(AuthService::new(
-            std::env::var("AZURE_TENANT_ID").unwrap_or_else(|_| "common".to_string()),
-            std::env::var("AZURE_CLIENT_ID").unwrap_or_else(|_| "your-client-id".to_string()),
-        ))
-    };
-    
-    let routes = create_routes(connection_manager.clone(), game_manager.clone(), matchmaking_queue.clone(), auth_service, user_repository);
-    
+    let auth_service =
+        if std::env::var("AUTH_DEV_MODE").unwrap_or_else(|_| "false".to_string()) == "true" {
+            info!("Starting in development authentication mode - JWT validation disabled");
+            Arc::new(AuthService::new_dev_mode())
+        } else {
+            Arc::new(AuthService::new(
+                std::env::var("AZURE_TENANT_ID").unwrap_or_else(|_| "common".to_string()),
+                std::env::var("AZURE_CLIENT_ID").unwrap_or_else(|_| "your-client-id".to_string()),
+            ))
+        };
+
+    let routes = create_routes(
+        connection_manager.clone(),
+        game_manager.clone(),
+        matchmaking_queue.clone(),
+        auth_service,
+        user_repository,
+    );
+
     // Start cleanup task
     let cleanup_connection_manager = connection_manager.clone();
     let cleanup_game_manager = game_manager.clone();
@@ -50,15 +60,22 @@ async fn main() {
             interval.tick().await;
             let connection_timeout = Duration::from_secs(config.connection_timeout_seconds);
             let game_timeout = Duration::from_secs(config.game_timeout_minutes * 60);
-            
-            cleanup_connection_manager.cleanup_inactive_connections(connection_timeout).await;
-            cleanup_game_manager.cleanup_abandoned_games(game_timeout).await;
+
+            cleanup_connection_manager
+                .cleanup_inactive_connections(connection_timeout)
+                .await;
+            cleanup_game_manager
+                .cleanup_abandoned_games(game_timeout)
+                .await;
         }
     });
-    
+
     info!("Server starting on {}:{}", config.host, config.port);
-    
+
     warp::serve(routes)
-        .run((config.host.parse::<std::net::IpAddr>().unwrap(), config.port))
+        .run((
+            config.host.parse::<std::net::IpAddr>().unwrap(),
+            config.port,
+        ))
         .await;
 }

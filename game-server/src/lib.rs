@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use warp::Filter;
-use uuid::Uuid;
 use serde::Deserialize;
+use std::sync::Arc;
+use uuid::Uuid;
+use warp::Filter;
 
 use crate::auth::AuthService;
 use crate::game_manager::GameManager;
@@ -137,7 +137,7 @@ async fn handle_game_state_request(
     // Check authentication if provided
     if let Some(auth_header) = auth_header {
         let token = auth_header.strip_prefix("Bearer ").unwrap_or(&auth_header);
-        
+
         match auth_service.validate_token(token).await {
             Ok(user) => {
                 // Check if user is in the game
@@ -163,20 +163,16 @@ async fn handle_game_state_request(
 
     // Get safe game state
     match game_manager.get_safe_game_state(&game_id).await {
-        Some(safe_state) => {
-            Ok(warp::reply::with_status(
-                warp::reply::json(&safe_state),
-                warp::http::StatusCode::OK,
-            ))
-        }
-        None => {
-            Ok(warp::reply::with_status(
-                warp::reply::json(&serde_json::json!({
-                    "error": "Game not found"
-                })),
-                warp::http::StatusCode::NOT_FOUND,
-            ))
-        }
+        Some(safe_state) => Ok(warp::reply::with_status(
+            warp::reply::json(&safe_state),
+            warp::http::StatusCode::OK,
+        )),
+        None => Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "Game not found"
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        )),
     }
 }
 
@@ -187,12 +183,10 @@ async fn handle_leaderboard_request(
     let limit = query.limit.unwrap_or(10).min(100); // Default 10, max 100
 
     match user_repository.get_leaderboard(limit).await {
-        Ok(leaderboard) => {
-            Ok(warp::reply::with_status(
-                warp::reply::json(&leaderboard),
-                warp::http::StatusCode::OK,
-            ))
-        }
+        Ok(leaderboard) => Ok(warp::reply::with_status(
+            warp::reply::json(&leaderboard),
+            warp::http::StatusCode::OK,
+        )),
         Err(err) => {
             tracing::error!("Failed to fetch leaderboard: {}", err);
             Ok(warp::reply::with_status(
@@ -227,7 +221,7 @@ async fn handle_user_stats_request(
     // Check authentication if provided - user can only view their own stats unless admin
     if let Some(auth_header) = auth_header {
         let token = auth_header.strip_prefix("Bearer ").unwrap_or(&auth_header);
-        
+
         match auth_service.validate_token(token).await {
             Ok(authenticated_user) => {
                 // Only allow users to view their own stats
@@ -276,14 +270,12 @@ async fn handle_user_stats_request(
                 warp::http::StatusCode::OK,
             ))
         }
-        Ok(None) => {
-            Ok(warp::reply::with_status(
-                warp::reply::json(&serde_json::json!({
-                    "error": "User not found"
-                })),
-                warp::http::StatusCode::NOT_FOUND,
-            ))
-        }
+        Ok(None) => Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "error": "User not found"
+            })),
+            warp::http::StatusCode::NOT_FOUND,
+        )),
         Err(err) => {
             tracing::error!("Failed to fetch user stats: {}", err);
             Ok(warp::reply::with_status(
@@ -299,24 +291,35 @@ async fn handle_user_stats_request(
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use game_types::{ClientMessage, ServerMessage, User};
-    use std::time::Duration;
-    use migration::{Migrator, MigratorTrait};
     use game_persistence::repositories::user_repository::LeaderboardEntry;
+    use game_types::{ClientMessage, ServerMessage, User};
+    use migration::{Migrator, MigratorTrait};
+    use std::time::Duration;
 
     async fn create_test_app()
     -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let connection_manager = Arc::new(ConnectionManager::new());
         let game_manager = Arc::new(GameManager::new());
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
-        let auth_service = Arc::new(AuthService::new("test-tenant".to_string(), "test-client".to_string()));
-        
+        let auth_service = Arc::new(AuthService::new(
+            "test-tenant".to_string(),
+            "test-client".to_string(),
+        ));
+
         // Create in-memory database for tests
-        let db = game_persistence::connection::connect_to_memory_database().await.unwrap();
+        let db = game_persistence::connection::connect_to_memory_database()
+            .await
+            .unwrap();
         migration::Migrator::up(&db, None).await.unwrap();
         let user_repository = Arc::new(UserRepository::new(db));
 
-        create_routes(connection_manager, game_manager, matchmaking_queue, auth_service, user_repository)
+        create_routes(
+            connection_manager,
+            game_manager,
+            matchmaking_queue,
+            auth_service,
+            user_repository,
+        )
     }
 
     async fn create_dev_test_app()
@@ -325,13 +328,21 @@ mod integration_tests {
         let game_manager = Arc::new(GameManager::new());
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
         let auth_service = Arc::new(AuthService::new_dev_mode());
-        
+
         // Create in-memory database for tests
-        let db = game_persistence::connection::connect_to_memory_database().await.unwrap();
+        let db = game_persistence::connection::connect_to_memory_database()
+            .await
+            .unwrap();
         migration::Migrator::up(&db, None).await.unwrap();
         let user_repository = Arc::new(UserRepository::new(db));
 
-        create_routes(connection_manager, game_manager, matchmaking_queue, auth_service, user_repository)
+        create_routes(
+            connection_manager,
+            game_manager,
+            matchmaking_queue,
+            auth_service,
+            user_repository,
+        )
     }
 
     #[tokio::test]
@@ -410,12 +421,12 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // First authenticate
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "user1:test@example.com:Test User".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "user1:test@example.com:Test User".to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
-        
+
         // Consume authentication success message
         let _auth_response = ws.recv().await.expect("Should receive auth response");
 
@@ -458,15 +469,15 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Authenticate both clients
-        let auth_msg1 = ClientMessage::Authenticate { 
-            token: "user3:test3@example.com:Test User 3".to_string() 
+        let auth_msg1 = ClientMessage::Authenticate {
+            token: "user3:test3@example.com:Test User 3".to_string(),
         };
         let auth_json1 = serde_json::to_string(&auth_msg1).expect("Should serialize");
         ws1.send_text(&auth_json1).await;
         let _auth_response1 = ws1.recv().await.expect("Should receive auth response");
 
-        let auth_msg2 = ClientMessage::Authenticate { 
-            token: "user4:test4@example.com:Test User 4".to_string() 
+        let auth_msg2 = ClientMessage::Authenticate {
+            token: "user4:test4@example.com:Test User 4".to_string(),
         };
         let auth_json2 = serde_json::to_string(&auth_msg2).expect("Should serialize");
         ws2.send_text(&auth_json2).await;
@@ -553,12 +564,12 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // First authenticate
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "user2:test2@example.com:Test User 2".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "user2:test2@example.com:Test User 2".to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
-        
+
         // Consume authentication success message
         let _auth_response = ws.recv().await.expect("Should receive auth response");
 
@@ -715,7 +726,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_auth_unauthenticated_queue_join_fails() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -746,7 +757,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_auth_dev_mode_string_token() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -754,8 +765,8 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Authenticate with simple string token
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "user1:alice@example.com:Alice".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "user1:alice@example.com:Alice".to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
@@ -780,7 +791,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_auth_dev_mode_json_token() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -789,8 +800,8 @@ mod integration_tests {
 
         // Authenticate with JSON token
         let json_token = r#"{"user_id":"550e8400-e29b-41d4-a716-446655440000","email":"bob@example.com","name":"Bob"}"#;
-        let auth_msg = ClientMessage::Authenticate { 
-            token: json_token.to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: json_token.to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
@@ -816,7 +827,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_auth_invalid_token_format() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -824,8 +835,8 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Try to authenticate with invalid token
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "invalid:token".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "invalid:token".to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
@@ -849,7 +860,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_auth_successful_queue_join() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -857,8 +868,8 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // First authenticate
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "user1:charlie@example.com:Charlie".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "user1:charlie@example.com:Charlie".to_string(),
         };
         let auth_json = serde_json::to_string(&auth_msg).expect("Should serialize");
         ws.send_text(&auth_json).await;
@@ -905,17 +916,19 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Authenticate first user
-        let auth_msg1 = ClientMessage::Authenticate { 
-            token: "user1:alice@example.com:Alice".to_string() 
+        let auth_msg1 = ClientMessage::Authenticate {
+            token: "user1:alice@example.com:Alice".to_string(),
         };
-        ws1.send_text(&serde_json::to_string(&auth_msg1).unwrap()).await;
+        ws1.send_text(&serde_json::to_string(&auth_msg1).unwrap())
+            .await;
         let _auth1 = ws1.recv().await.expect("Should receive auth response");
 
         // Authenticate second user
-        let auth_msg2 = ClientMessage::Authenticate { 
-            token: "user2:bob@example.com:Bob".to_string() 
+        let auth_msg2 = ClientMessage::Authenticate {
+            token: "user2:bob@example.com:Bob".to_string(),
         };
-        ws2.send_text(&serde_json::to_string(&auth_msg2).unwrap()).await;
+        ws2.send_text(&serde_json::to_string(&auth_msg2).unwrap())
+            .await;
         let _auth2 = ws2.recv().await.expect("Should receive auth response");
 
         // Both users join queue
@@ -954,7 +967,7 @@ mod integration_tests {
         // Both should eventually receive match found messages
         // Let's wait a bit and see if matchmaking creates a game
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         // Try to receive any additional messages (like match found)
         // This is optional since matchmaking might not trigger immediately
         if let Ok(msg) = tokio::time::timeout(Duration::from_millis(100), ws1.recv()).await {
@@ -972,7 +985,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_queue_status_tracking() {
         let app = create_dev_test_app().await;
-        
+
         let mut ws = warp::test::ws()
             .path("/ws")
             .handshake(app)
@@ -980,23 +993,28 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Authenticate
-        let auth_msg = ClientMessage::Authenticate { 
-            token: "user1:test@example.com:TestUser".to_string() 
+        let auth_msg = ClientMessage::Authenticate {
+            token: "user1:test@example.com:TestUser".to_string(),
         };
-        ws.send_text(&serde_json::to_string(&auth_msg).unwrap()).await;
-        
+        ws.send_text(&serde_json::to_string(&auth_msg).unwrap())
+            .await;
+
         // Consume auth success
         let auth_response = ws.recv().await.expect("Should receive auth response");
         if auth_response.is_text() {
             let text = auth_response.to_str().unwrap();
             let server_msg: ServerMessage =
                 serde_json::from_str(&text).expect("Should be valid ServerMessage");
-            assert!(matches!(server_msg, ServerMessage::AuthenticationSuccess { .. }));
+            assert!(matches!(
+                server_msg,
+                ServerMessage::AuthenticationSuccess { .. }
+            ));
         }
 
         // Join queue
         let join_msg = ClientMessage::JoinQueue;
-        ws.send_text(&serde_json::to_string(&join_msg).unwrap()).await;
+        ws.send_text(&serde_json::to_string(&join_msg).unwrap())
+            .await;
 
         // Verify queue joined response
         let queue_response = ws.recv().await.expect("Should receive queue response");
@@ -1014,7 +1032,8 @@ mod integration_tests {
 
         // Leave queue
         let leave_msg = ClientMessage::LeaveQueue;
-        ws.send_text(&serde_json::to_string(&leave_msg).unwrap()).await;
+        ws.send_text(&serde_json::to_string(&leave_msg).unwrap())
+            .await;
 
         // Verify queue left response
         let leave_response = ws.recv().await.expect("Should receive leave response");
@@ -1063,10 +1082,12 @@ mod integration_tests {
 
         // We would need to populate the database through the repository directly
         // Since we can't access it from the test app, we'll create a fresh DB connection
-        let db = game_persistence::connection::connect_to_memory_database().await.unwrap();
+        let db = game_persistence::connection::connect_to_memory_database()
+            .await
+            .unwrap();
         Migrator::up(&db, None).await.unwrap();
         let repo = UserRepository::new(db);
-        
+
         for user in &users {
             repo.create_user(user.clone()).await.unwrap();
         }
@@ -1085,10 +1106,10 @@ mod integration_tests {
             .await;
 
         assert_eq!(response.status(), 200);
-        
-        let leaderboard: Vec<LeaderboardEntry> = 
+
+        let leaderboard: Vec<LeaderboardEntry> =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         assert_eq!(leaderboard.len(), 0);
     }
 
@@ -1103,10 +1124,10 @@ mod integration_tests {
             .await;
 
         assert_eq!(response.status(), 200);
-        
-        let leaderboard: Vec<LeaderboardEntry> = 
+
+        let leaderboard: Vec<LeaderboardEntry> =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         // Should respect the limit (even if empty)
         assert!(leaderboard.len() <= 2);
     }
@@ -1137,10 +1158,10 @@ mod integration_tests {
             .await;
 
         assert_eq!(response.status(), 401);
-        
-        let error: serde_json::Value = 
+
+        let error: serde_json::Value =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         assert_eq!(error["error"], "Authentication required");
     }
 
@@ -1156,10 +1177,10 @@ mod integration_tests {
             .await;
 
         assert_eq!(response.status(), 400);
-        
-        let error: serde_json::Value = 
+
+        let error: serde_json::Value =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         assert_eq!(error["error"], "Invalid user ID format");
     }
 
@@ -1173,15 +1194,18 @@ mod integration_tests {
         let response = warp::test::request()
             .method("GET")
             .path(&format!("/user/{}/stats", different_user_id))
-            .header("authorization", &format!("{}:test@example.com:Test", user_id))
+            .header(
+                "authorization",
+                &format!("{}:test@example.com:Test", user_id),
+            )
             .reply(&app)
             .await;
 
         assert_eq!(response.status(), 403);
-        
-        let error: serde_json::Value = 
+
+        let error: serde_json::Value =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         assert_eq!(error["error"], "Not authorized to view this user's stats");
     }
 
@@ -1194,15 +1218,18 @@ mod integration_tests {
         let response = warp::test::request()
             .method("GET")
             .path(&format!("/user/{}/stats", user_id))
-            .header("authorization", &format!("{}:test@example.com:Test", user_id))
+            .header(
+                "authorization",
+                &format!("{}:test@example.com:Test", user_id),
+            )
             .reply(&app)
             .await;
 
         assert_eq!(response.status(), 404);
-        
-        let error: serde_json::Value = 
+
+        let error: serde_json::Value =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
-        
+
         assert_eq!(error["error"], "User not found");
     }
 }
