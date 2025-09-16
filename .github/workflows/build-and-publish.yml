@@ -34,6 +34,7 @@ jobs:
     - name: Generate types
       run: |
         cargo test -p game-types
+        mkdir -p frontend/src/types/generated/
         cp game-types/bindings/*.ts frontend/src/types/generated/
 
 
