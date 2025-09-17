@@ -17,7 +17,8 @@ frontend/build/
 *.tsbuildinfo
 
 # Generated TypeScript Types
-frontend/src/types/generated/
+frontend/src/types/generated/*
+!frontend/src/types/generated/index.ts
 game-types/bindings/
 
 # Database Files
