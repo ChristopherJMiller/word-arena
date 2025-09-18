@@ -327,9 +327,12 @@ mod integration_tests {
     -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let connection_manager = Arc::new(ConnectionManager::new());
 
-        // In test mode, GameManager will automatically use test words via WordValidator::new()
-        let game_manager =
-            Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
+        // Use test words for predictable testing
+        let word_validator = game_core::word_validation::WordValidator::new_with_test_words();
+        let game_manager = Arc::new(GameManager::new_with_validator(
+            connection_manager.clone(),
+            word_validator,
+        ));
 
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
         let auth_service = Arc::new(AuthService::new_dev_mode());

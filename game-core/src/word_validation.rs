@@ -11,64 +11,54 @@ pub struct WordValidator {
 impl WordValidator {
     /// Create a new word validator by loading all .txt files from a directory
     pub fn new<P: AsRef<Path>>(dir_path: P) -> Result<Self> {
-        // In test mode, use a predictable word list instead of loading from files
-        #[cfg(test)]
-        {
-            return Ok(Self::new_with_test_words());
+        let dir = dir_path.as_ref();
+        if !dir.exists() {
+            return Err(anyhow!("Directory does not exist: {}", dir.display()));
+        }
+        if !dir.is_dir() {
+            return Err(anyhow!("Path is not a directory: {}", dir.display()));
         }
 
-        #[cfg(not(test))]
-        {
-            let dir = dir_path.as_ref();
-            if !dir.exists() {
-                return Err(anyhow!("Directory does not exist: {}", dir.display()));
+        let mut all_words = HashSet::new();
+
+        // Read all .txt files in the directory
+        let entries = fs::read_dir(dir)
+            .map_err(|e| anyhow!("Failed to read directory {}: {}", dir.display(), e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| anyhow!("Failed to read directory entry: {}", e))?;
+            let path = entry.path();
+
+            // Only process .txt files
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
+                let content = fs::read_to_string(&path)
+                    .map_err(|e| anyhow!("Failed to read file {}: {}", path.display(), e))?;
+
+                // Parse words from this file using the same logic as the original constructor
+                let words_from_file: HashSet<String> = content
+                    .lines()
+                    .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+                    .map(|word| word.trim().to_lowercase())
+                    .filter(|word| word.len() >= 5 && word.len() <= 8)
+                    .collect();
+
+                all_words.extend(words_from_file);
             }
-            if !dir.is_dir() {
-                return Err(anyhow!("Path is not a directory: {}", dir.display()));
-            }
-
-            let mut all_words = HashSet::new();
-
-            // Read all .txt files in the directory
-            let entries = fs::read_dir(dir)
-                .map_err(|e| anyhow!("Failed to read directory {}: {}", dir.display(), e))?;
-
-            for entry in entries {
-                let entry = entry.map_err(|e| anyhow!("Failed to read directory entry: {}", e))?;
-                let path = entry.path();
-
-                // Only process .txt files
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
-                    let content = fs::read_to_string(&path)
-                        .map_err(|e| anyhow!("Failed to read file {}: {}", path.display(), e))?;
-
-                    // Parse words from this file using the same logic as the original constructor
-                    let words_from_file: HashSet<String> = content
-                        .lines()
-                        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
-                        .map(|word| word.trim().to_lowercase())
-                        .filter(|word| word.len() >= 5 && word.len() <= 8)
-                        .collect();
-
-                    all_words.extend(words_from_file);
-                }
-            }
-
-            if all_words.is_empty() {
-                return Err(anyhow!(
-                    "No valid words found in .txt files in directory: {}",
-                    dir.display()
-                ));
-            }
-
-            Ok(Self {
-                valid_words: all_words,
-            })
         }
+
+        if all_words.is_empty() {
+            return Err(anyhow!(
+                "No valid words found in .txt files in directory: {}",
+                dir.display()
+            ));
+        }
+
+        Ok(Self {
+            valid_words: all_words,
+        })
     }
 
     /// Create a new word validator with test words (for testing)
-    #[cfg(test)]
     pub fn new_with_test_words() -> Self {
         let test_words = vec![
             // 5-letter words

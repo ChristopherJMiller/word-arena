@@ -44,10 +44,12 @@ impl TestGameServerSetup {
     pub fn new() -> Self {
         let connection_manager = Arc::new(ConnectionManager::new());
         
-        // In test mode, GameManager will automatically use test words via WordValidator::new()
+        // Use test words for predictable testing
+        let word_validator = WordValidator::new_with_test_words();
+        
         Self {
             connection_manager: connection_manager.clone(),
-            game_manager: Arc::new(GameManager::new_with_default_words(connection_manager).unwrap()),
+            game_manager: Arc::new(GameManager::new_with_validator(connection_manager, word_validator)),
             matchmaking_queue: Arc::new(MatchmakingQueue::new()),
             auth_service: Arc::new(AuthService::new_dev_mode()),
         }
