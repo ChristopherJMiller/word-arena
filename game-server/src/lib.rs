@@ -78,7 +78,7 @@ pub fn create_routes(
         .map(|| warp::reply::with_status("OK", warp::http::StatusCode::OK));
 
     // Game state endpoint - safe for reconnection
-    let game_state = warp::path!("game" / String / "state")
+    let game_state = warp::path!("api" / "game" / String / "state")
         .and(warp::get())
         .and(warp::header::optional::<String>("authorization"))
         .and(game_manager_filter.clone())
@@ -86,14 +86,14 @@ pub fn create_routes(
         .and_then(handle_game_state_request);
 
     // Leaderboard endpoint
-    let leaderboard = warp::path("leaderboard")
+    let leaderboard = warp::path!("api" / "leaderboard")
         .and(warp::get())
         .and(warp::query::<LeaderboardQuery>())
         .and(user_repository_filter.clone())
         .and_then(handle_leaderboard_request);
 
     // User stats endpoint
-    let user_stats = warp::path!("user" / String / "stats")
+    let user_stats = warp::path!("api" / "user" / String / "stats")
         .and(warp::get())
         .and(warp::header::optional::<String>("authorization"))
         .and(user_repository_filter.clone())
@@ -1109,7 +1109,7 @@ mod integration_tests {
 
         let response = warp::test::request()
             .method("GET")
-            .path("/leaderboard")
+            .path("/api/leaderboard")
             .reply(&app)
             .await;
 
@@ -1127,7 +1127,7 @@ mod integration_tests {
 
         let response = warp::test::request()
             .method("GET")
-            .path("/leaderboard?limit=2")
+            .path("/api/leaderboard?limit=2")
             .reply(&app)
             .await;
 
@@ -1147,7 +1147,7 @@ mod integration_tests {
         // Test with very high limit - should be capped at 100
         let response = warp::test::request()
             .method("GET")
-            .path("/leaderboard?limit=1000")
+            .path("/api/leaderboard?limit=1000")
             .reply(&app)
             .await;
 
@@ -1161,7 +1161,7 @@ mod integration_tests {
 
         let response = warp::test::request()
             .method("GET")
-            .path(&format!("/user/{}/stats", user_id))
+            .path(&format!("/api/user/{}/stats", user_id))
             .reply(&app)
             .await;
 
@@ -1179,7 +1179,7 @@ mod integration_tests {
 
         let response = warp::test::request()
             .method("GET")
-            .path("/user/invalid-uuid/stats")
+            .path("/api/user/invalid-uuid/stats")
             .header("authorization", "user1:test@example.com:Test")
             .reply(&app)
             .await;
@@ -1201,7 +1201,7 @@ mod integration_tests {
         // Try to access another user's stats
         let response = warp::test::request()
             .method("GET")
-            .path(&format!("/user/{}/stats", different_user_id))
+            .path(&format!("/api/user/{}/stats", different_user_id))
             .header(
                 "authorization",
                 &format!("{}:test@example.com:Test", user_id),
@@ -1225,7 +1225,7 @@ mod integration_tests {
         // Request own stats for a user that doesn't exist in DB
         let response = warp::test::request()
             .method("GET")
-            .path(&format!("/user/{}/stats", user_id))
+            .path(&format!("/api/user/{}/stats", user_id))
             .header(
                 "authorization",
                 &format!("{}:test@example.com:Test", user_id),
