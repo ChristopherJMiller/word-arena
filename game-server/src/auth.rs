@@ -18,10 +18,11 @@ pub struct MicrosoftJwtClaims {
     pub iss: String,                // Issuer
     pub iat: u64,                   // Issued at
     pub exp: u64,                   // Expiry
-    pub sub: String,                // Subject (user ID)
-    pub email: String,              // User email
-    pub name: String,               // Display name
-    pub preferred_username: String, // Username
+    pub sub: Option<String>,        // Subject (user ID) - optional
+    pub oid: Option<String>,        // Object ID (Azure AD user ID) - optional
+    pub email: Option<String>,      // User email - optional in some scenarios
+    pub name: Option<String>,       // Display name - optional
+    pub preferred_username: Option<String>, // Username - optional
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,8 +78,14 @@ impl AuthService {
         }
 
         // Decode header to get key ID
-        let header = decode_header(token).map_err(|_| AuthError::InvalidToken)?;
-        let kid = header.kid.ok_or(AuthError::InvalidToken)?;
+        let header = decode_header(token).map_err(|e| {
+            tracing::warn!("Failed to decode JWT header: {:?}", e);
+            AuthError::InvalidToken
+        })?;
+        let kid = header.kid.ok_or_else(|| {
+            tracing::warn!("JWT header missing 'kid' field");
+            AuthError::InvalidToken
+        })?;
 
         // Get or fetch the public key
         let decoding_key = self.get_decoding_key(&kid).await?;
@@ -92,7 +99,10 @@ impl AuthService {
         )]);
 
         let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
-            .map_err(|_| AuthError::InvalidToken)?;
+            .map_err(|e| {
+                tracing::warn!("JWT token validation failed: {:?}", e);
+                AuthError::InvalidToken
+            })?;
 
         let claims = token_data.claims;
 
@@ -107,10 +117,16 @@ impl AuthService {
         }
 
         // Create user from claims
+        // Use oid (object ID) if available, fallback to sub, then generate new UUID
+        let user_id = claims.oid
+            .or(claims.sub)
+            .and_then(|id| uuid::Uuid::parse_str(&id).ok())
+            .unwrap_or_else(|| uuid::Uuid::new_v4());
+
         Ok(User {
-            id: Uuid::new_v4(), // We'll need to look this up or create in database
-            email: claims.email,
-            display_name: claims.name,
+            id: user_id,
+            email: claims.email.unwrap_or_else(|| "unknown@example.com".to_string()),
+            display_name: claims.name.unwrap_or_else(|| "Unknown User".to_string()),
             total_points: 0,
             total_wins: 0,
             total_games: 0,
@@ -186,6 +202,7 @@ impl AuthService {
     async fn validate_dev_token(&self, token: &str) -> Result<User, AuthError> {
         // In dev mode, we expect a JWT-like token but we parse it without validation
         // We just decode the payload section and extract the claims
+        tracing::debug!("Validating dev token (first 20 chars): {}", &token[..token.len().min(20)]);
 
         // Check if it looks like a JWT (has 3 parts separated by dots)
         let parts: Vec<&str> = token.split('.').collect();
@@ -205,17 +222,29 @@ impl AuthService {
             // Decode base64
             let payload_bytes =
                 base64::Engine::decode(&base64::engine::general_purpose::STANDARD, standard_b64)
-                    .map_err(|_| AuthError::InvalidToken)?;
+                    .map_err(|e| {
+                        tracing::warn!("Failed to decode JWT payload in dev mode: {:?}", e);
+                        AuthError::InvalidToken
+                    })?;
 
             // Parse as JSON to get claims
             let claims: MicrosoftJwtClaims =
-                serde_json::from_slice(&payload_bytes).map_err(|_| AuthError::InvalidToken)?;
+                serde_json::from_slice(&payload_bytes).map_err(|e| {
+                    tracing::warn!("Failed to parse JWT claims in dev mode: {:?}", e);
+                    AuthError::InvalidToken
+                })?;
 
             // Create user from claims (no validation in dev mode)
+            // Use oid (object ID) if available, fallback to sub, then generate new UUID
+            let user_id = claims.oid
+                .or(claims.sub)
+                .and_then(|id| uuid::Uuid::parse_str(&id).ok())
+                .unwrap_or_else(|| uuid::Uuid::new_v4());
+
             Ok(User {
-                id: uuid::Uuid::parse_str(&claims.sub).unwrap_or_else(|_| uuid::Uuid::new_v4()),
-                email: claims.email,
-                display_name: claims.name,
+                id: user_id,
+                email: claims.email.unwrap_or_else(|| "dev@example.com".to_string()),
+                display_name: claims.name.unwrap_or_else(|| "Dev User".to_string()),
                 total_points: 0,
                 total_wins: 0,
                 total_games: 0,

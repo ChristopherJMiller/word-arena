@@ -37,6 +37,7 @@ services:
       - "DATABASE_URL=sqlite::memory:"
       - RUST_LOG=info
       - WORDS_DIRECTORY=/app/word_lists
+      - HOST=0.0.0.0
     networks:
       - word-arena
 
