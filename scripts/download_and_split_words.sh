@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Script to download a large English word list and split it by word length
 # Downloads from dwyl/english-words repository and creates separate files for 5-7 letter words

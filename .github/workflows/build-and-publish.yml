@@ -71,7 +71,8 @@ jobs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context: ./frontend
+        context: .
+        file: ./frontend/Dockerfile
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -104,18 +105,22 @@ jobs:
     - name: Generate word lists
       run: |
         chmod +x scripts/download_and_split_words.sh
-        ./scripts/download_and_split_words.sh word_lists
+        bash scripts/download_and_split_words.sh word_lists
         echo "Word list files created:"
         ls -la word_lists/
-        echo "Current directory: $(pwd)"
+        # Also create in game-server/data for compatibility
+        mkdir -p game-server/data
+        cp -r word_lists/* game-server/data/
+        echo "Copied to game-server/data:"
+        ls -la game-server/data/
 
     - name: Run backend tests
       run: |
-        export WORD_LISTS_DIR="word_lists"
+        export WORD_LISTS_DIR="$(pwd)/word_lists"
         echo "WORD_LISTS_DIR is set to: $WORD_LISTS_DIR"
         echo "Checking if word_lists directory exists:"
         ls -la word_lists/
-        npm run test:backend
+        cargo test --workspace
 
     - name: Log in to Container Registry
       if: github.event_name != 'pull_request'
