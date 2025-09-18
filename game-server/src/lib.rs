@@ -327,19 +327,9 @@ mod integration_tests {
     -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let connection_manager = Arc::new(ConnectionManager::new());
 
-        // Create a test word validator with known words for predictable testing
-        let test_words = vec![
-            "about", "above", "after", "again", "beach", "black", "brown", "chair",
-            "close", "early", "house", "place", "right", "round", "today", "which",
-            "world", "wrong", "guess", "first", "second", "third", "forth", "fifth",
-            "sixth", "seven", "eight"
-        ];
-        let word_list = test_words.join("\n");
-        let word_validator = game_core::word_validation::WordValidator::from_word_list(&word_list);
-        let game_manager = Arc::new(GameManager::new_with_validator(
-            connection_manager.clone(),
-            word_validator,
-        ));
+        // In test mode, GameManager will automatically use test words via WordValidator::new()
+        let game_manager =
+            Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
 
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
         let auth_service = Arc::new(AuthService::new_dev_mode());
