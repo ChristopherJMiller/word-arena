@@ -172,36 +172,70 @@ impl AuthService {
             .get(&jwks_url)
             .send()
             .await
-            .map_err(|_| AuthError::JwksFetchError)?;
+            .map_err(|e| {
+                tracing::warn!("Failed to fetch JWKS: {:?}", e);
+                AuthError::JwksFetchError
+            })?;
+
+        if !response.status().is_success() {
+            tracing::warn!("JWKS fetch returned status: {}", response.status());
+            return Err(AuthError::JwksFetchError);
+        }
 
         let jwks: JwksResponse = response
             .json()
             .await
-            .map_err(|_| AuthError::JwksFetchError)?;
+            .map_err(|e| {
+                tracing::warn!("Failed to parse JWKS JSON: {:?}", e);
+                AuthError::JwksFetchError
+            })?;
+
+        tracing::debug!("Successfully fetched JWKS with {} keys", jwks.keys.len());
 
         // Find the key with matching kid
+        tracing::debug!("Looking for key with kid: {}", kid);
+        tracing::debug!("Available keys: {:?}", jwks.keys.iter().map(|k| &k.kid).collect::<Vec<_>>());
+        
         let jwks_key = jwks
             .keys
             .iter()
             .find(|key| key.kid == kid)
-            .ok_or(AuthError::KeyNotFound)?;
+            .ok_or_else(|| {
+                tracing::warn!("Key with kid '{}' not found in JWKS", kid);
+                AuthError::KeyNotFound
+            })?;
 
         // Convert to DecodingKey
+        tracing::debug!("Converting JWKS key to decoding key. Has n,e: {}, Has x5c: {}", 
+                       jwks_key.n.is_some() && jwks_key.e.is_some(),
+                       jwks_key.x5c.is_some());
+        
         let decoding_key = if let (Some(n), Some(e)) = (&jwks_key.n, &jwks_key.e) {
-            DecodingKey::from_rsa_components(n, e).map_err(|_| AuthError::InvalidKey)?
+            tracing::debug!("Using RSA components (n,e) to create decoding key");
+            DecodingKey::from_rsa_components(n, e).map_err(|e| {
+                tracing::warn!("Failed to create decoding key from RSA components: {:?}", e);
+                AuthError::InvalidKey
+            })?
         } else if let Some(x5c) = &jwks_key.x5c {
             if let Some(cert) = x5c.first() {
+                tracing::debug!("Using x5c certificate to create decoding key");
                 let cert_der = base64::engine::general_purpose::STANDARD
                     .decode(cert)
-                    .map_err(|_| AuthError::InvalidKey)?;
-                // from_rsa_der doesn't return a Result, it's infallible for valid DER
+                    .map_err(|e| {
+                        tracing::warn!("Failed to decode x5c certificate: {:?}", e);
+                        AuthError::InvalidKey
+                    })?;
                 DecodingKey::from_rsa_der(&cert_der)
             } else {
+                tracing::warn!("x5c array is empty");
                 return Err(AuthError::InvalidKey);
             }
         } else {
+            tracing::warn!("JWKS key has neither n,e components nor x5c certificate");
             return Err(AuthError::InvalidKey);
         };
+        
+        tracing::debug!("Successfully created decoding key for kid: {}", kid);
 
         // Cache the key
         {
