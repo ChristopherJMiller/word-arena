@@ -189,7 +189,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // Get access token
       const tokenResponse = await msalInstance.acquireTokenSilent({
-        scopes: ["openid", "profile", "email"],
+        scopes: ["api://72da9d9f-22a6-45c3-82ec-7b214eca7590/user_impersonation"],
         account,
       });
 
@@ -224,7 +224,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       const loginResponse = await msalInstance.loginPopup({
-        scopes: ["openid", "profile", "email"],
+        scopes: ["api://72da9d9f-22a6-45c3-82ec-7b214eca7590/user_impersonation"],
       });
 
       if (loginResponse.account) {
@@ -269,7 +269,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (accounts.length === 0) return null;
 
       const tokenResponse = await msalInstance.acquireTokenSilent({
-        scopes: ["openid", "profile", "email"],
+        scopes: ["api://72da9d9f-22a6-45c3-82ec-7b214eca7590/user_impersonation"],
         account: accounts[0],
       });
 

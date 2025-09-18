@@ -78,17 +78,8 @@ impl AuthService {
             return self.validate_dev_token(token).await;
         }
 
-        // For Azure AD tokens, we need to handle the nonce field specially
-        // Azure AD Graph tokens require nonce SHA256 hashing before validation
-        let processed_token = if token.contains("\"nonce\"") {
-            tracing::debug!("Token contains nonce field, applying Azure AD nonce processing");
-            self.process_azure_nonce_token(token)?
-        } else {
-            token.to_string()
-        };
-
         // Decode header to get key ID
-        let header = decode_header(&processed_token).map_err(|e| {
+        let header = decode_header(token).map_err(|e| {
             tracing::warn!("Failed to decode JWT header: {:?}", e);
             AuthError::InvalidToken
         })?;
@@ -103,18 +94,18 @@ impl AuthService {
 
         // Validate the token
         let mut validation = Validation::new(Algorithm::RS256);
-        // Microsoft Graph audience for Azure AD tokens
-        validation.set_audience(&["00000003-0000-0000-c000-000000000000"]);
+        // Use our app's client ID as the audience (not Microsoft Graph)
+        validation.set_audience(&[&self.client_id]);
         
         // Support both v1.0 and v2.0 issuer formats
         let v1_issuer = format!("https://sts.windows.net/{}/", self.tenant_id);
         let v2_issuer = format!("https://login.microsoftonline.com/{}/v2.0", self.tenant_id);
         validation.set_issuer(&[&v1_issuer, &v2_issuer]);
         
-        tracing::debug!("Validating token with audience: 00000003-0000-0000-c000-000000000000");
+        tracing::debug!("Validating token with audience: {}", self.client_id);
         tracing::debug!("Accepted issuers: {} and {}", v1_issuer, v2_issuer);
 
-        let token_data = decode::<MicrosoftJwtClaims>(&processed_token, &decoding_key, &validation)
+        let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
             .map_err(|e| {
                 tracing::warn!("JWT token validation failed: {:?}", e);
                 tracing::warn!("Token validation details:");
@@ -272,73 +263,6 @@ impl AuthService {
         Ok(decoding_key)
     }
 
-    /// Process Azure AD tokens with nonce field by applying SHA256 hash
-    /// This is required for Microsoft Graph tokens
-    fn process_azure_nonce_token(&self, token: &str) -> Result<String, AuthError> {
-        let parts: Vec<&str> = token.split('.').collect();
-        if parts.len() != 3 {
-            tracing::warn!("Invalid JWT format - expected 3 parts separated by dots");
-            return Err(AuthError::InvalidToken);
-        }
-
-        let header_b64 = parts[0];
-        let payload_b64 = parts[1];
-        let signature_b64 = parts[2];
-
-        // Decode the header to check for nonce
-        let header_padded = match header_b64.len() % 4 {
-            0 => header_b64.to_string(),
-            n => format!("{}{}", header_b64, "=".repeat(4 - n)),
-        };
-        let header_standard = header_padded.replace('-', "+").replace('_', "/");
-        
-        let header_bytes = base64::engine::general_purpose::STANDARD
-            .decode(header_standard)
-            .map_err(|e| {
-                tracing::warn!("Failed to decode JWT header for nonce processing: {:?}", e);
-                AuthError::InvalidToken
-            })?;
-
-        let mut header_json: serde_json::Value = serde_json::from_slice(&header_bytes)
-            .map_err(|e| {
-                tracing::warn!("Failed to parse JWT header JSON for nonce processing: {:?}", e);
-                AuthError::InvalidToken
-            })?;
-
-        // Check if nonce exists and process it
-        if let Some(nonce_value) = header_json.get("nonce") {
-            if let Some(nonce_str) = nonce_value.as_str() {
-                tracing::debug!("Processing nonce field: {}", nonce_str);
-                
-                // Compute SHA256 of the nonce
-                let mut hasher = Sha256::new();
-                hasher.update(nonce_str.as_bytes());
-                let hash_result = hasher.finalize();
-                let hash_base64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash_result);
-                
-                tracing::debug!("Replacing nonce with SHA256 hash: {}", hash_base64);
-                header_json["nonce"] = serde_json::Value::String(hash_base64);
-
-                // Re-encode the header
-                let new_header_json = serde_json::to_vec(&header_json)
-                    .map_err(|e| {
-                        tracing::warn!("Failed to serialize modified header: {:?}", e);
-                        AuthError::InvalidToken
-                    })?;
-
-                let new_header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(new_header_json);
-                
-                // Reconstruct the token
-                let processed_token = format!("{}.{}.{}", new_header_b64, payload_b64, signature_b64);
-                tracing::debug!("Successfully processed Azure AD nonce token");
-                return Ok(processed_token);
-            }
-        }
-
-        // If no nonce found, return original token
-        tracing::debug!("No nonce field found in header");
-        Ok(token.to_string())
-    }
 
     async fn validate_dev_token(&self, token: &str) -> Result<User, AuthError> {
         // In dev mode, we expect a JWT-like token but we parse it without validation
