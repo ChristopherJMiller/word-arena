@@ -217,7 +217,11 @@ impl ConnectionManager {
 
     /// Send personalized game state updates to each player in a game
     /// Each player only sees their own guess history, not other players' histories
-    pub async fn send_personalized_game_state(&self, game_id: &str, game_state: &game_types::GameState) {
+    pub async fn send_personalized_game_state(
+        &self,
+        game_id: &str,
+        game_state: &game_types::GameState,
+    ) {
         let connections = self.connections.read().await;
         for connection in connections.values() {
             if let Some(ref conn_game_id) = connection.game_id {
@@ -225,7 +229,9 @@ impl ConnectionManager {
                     if let Some(ref user) = connection.user {
                         // Create personalized state for this player
                         let personalized_state = game_state.personalized_for_player(user.id);
-                        let message = ServerMessage::GameStateUpdate { state: personalized_state };
+                        let message = ServerMessage::GameStateUpdate {
+                            state: personalized_state,
+                        };
                         let _ = connection.send_message(message);
                     }
                 }

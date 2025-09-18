@@ -49,7 +49,7 @@ pub enum ServerMessage {
         winning_guess: GuessResult,
         your_guess: Option<PersonalGuess>,
         next_phase: GamePhase,
-        is_word_completed: bool,  // Explicit flag for word completion
+        is_word_completed: bool, // Explicit flag for word completion
     },
     GameOver {
         winner: Player,

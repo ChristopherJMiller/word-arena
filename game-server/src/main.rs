@@ -18,11 +18,12 @@ async fn main() {
     // Initialize application state
     let config = Config::new();
     let connection_manager = Arc::new(ConnectionManager::new());
-    
+
     // Initialize game manager with directory-based word loading
-    let words_dir = std::env::var("WORDS_DIRECTORY").unwrap_or_else(|_| "./shared/words".to_string());
+    let words_dir =
+        std::env::var("WORDS_DIRECTORY").unwrap_or_else(|_| "./shared/words".to_string());
     info!("Loading words from directory: {}", words_dir);
-    
+
     let game_manager = match GameManager::new(connection_manager.clone(), &words_dir) {
         Ok(gm) => {
             info!("Successfully loaded words from directory");
@@ -32,11 +33,13 @@ async fn main() {
             tracing::error!("Failed to load words from directory '{}': {}", words_dir, e);
             tracing::error!("The server requires word files to function.");
             tracing::error!("Run './scripts/download_and_split_words.sh' to generate word lists.");
-            tracing::error!("Or set WORDS_DIRECTORY to point to a directory containing .txt word files.");
+            tracing::error!(
+                "Or set WORDS_DIRECTORY to point to a directory containing .txt word files."
+            );
             std::process::exit(1);
         }
     };
-    
+
     let matchmaking_queue = Arc::new(MatchmakingQueue::new());
 
     // Initialize database connection and run migrations

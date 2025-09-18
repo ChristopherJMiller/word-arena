@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::user::{Player};
+use crate::user::Player;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -73,21 +73,25 @@ impl GameState {
     /// Create a personalized version of the game state for a specific player
     /// Only includes that player's guess history, while other players' histories are cleared
     pub fn personalized_for_player(&self, player_id: uuid::Uuid) -> Self {
-        let filtered_players = self.players.iter().map(|player| {
-            if player.user_id == player_id {
-                // Keep the requesting player's full data
-                player.clone()
-            } else {
-                // For other players, clear their guess history to protect privacy
-                Player {
-                    user_id: player.user_id,
-                    display_name: player.display_name.clone(),
-                    points: player.points,
-                    guess_history: Vec::new(), // Clear other players' guess histories
-                    is_connected: player.is_connected,
+        let filtered_players = self
+            .players
+            .iter()
+            .map(|player| {
+                if player.user_id == player_id {
+                    // Keep the requesting player's full data
+                    player.clone()
+                } else {
+                    // For other players, clear their guess history to protect privacy
+                    Player {
+                        user_id: player.user_id,
+                        display_name: player.display_name.clone(),
+                        points: player.points,
+                        guess_history: Vec::new(), // Clear other players' guess histories
+                        is_connected: player.is_connected,
+                    }
                 }
-            }
-        }).collect();
+            })
+            .collect();
 
         GameState {
             id: self.id,

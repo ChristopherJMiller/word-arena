@@ -303,7 +303,7 @@ async fn test_game_continues_with_valid_words() {
 
         // Check current game phase first
         let current_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-        
+
         let event = if current_state.current_phase == GamePhase::IndividualGuess {
             // Individual guess phase - only winner can guess
             let winner_id = current_state.current_winner.unwrap();
@@ -312,7 +312,10 @@ async fn test_game_continues_with_valid_words() {
             } else {
                 *bob_conn
             };
-            setup.submit_guess(&game_id, winner_conn, word1).await.unwrap()
+            setup
+                .submit_guess(&game_id, winner_conn, word1)
+                .await
+                .unwrap()
         } else {
             // Collaborative phase - both players guess
             play_round(
@@ -460,18 +463,21 @@ async fn test_round_completion_starts_new_round() {
     // Get the initial game state to know the target word
     let initial_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
     let initial_round = initial_state.current_round;
-    
+
     // We need to access the actual target word from the game manager
     // For testing purposes, let's try some common 5-letter words
     // Based on the failing tests, target words can be different each run
-    let common_words = ["TODAY", "WHICH", "EARLY", "ROUND", "CLOSE", "ABOUT", "AFTER", "WORLD", "HOUSE", "PLACE", "WHERE", "RIGHT"];
-    
+    let common_words = [
+        "TODAY", "WHICH", "EARLY", "ROUND", "CLOSE", "ABOUT", "AFTER", "WORLD", "HOUSE", "PLACE",
+        "WHERE", "RIGHT",
+    ];
+
     let mut round_completed = false;
-    
+
     for target_word in common_words {
         // Check current phase before attempting to guess
         let current_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-        
+
         let event = if current_state.current_phase == GamePhase::Guessing {
             // Try collaborative guessing with the potential target word
             play_round(
@@ -488,8 +494,11 @@ async fn test_round_completion_starts_new_round() {
             } else {
                 *bob_conn
             };
-            
-            setup.game_manager.submit_guess(&game_id, winner_conn, target_word.to_string()).await
+
+            setup
+                .game_manager
+                .submit_guess(&game_id, winner_conn, target_word.to_string())
+                .await
         } else {
             // Skip other phases
             continue;
@@ -500,8 +509,9 @@ async fn test_round_completion_starts_new_round() {
                 // Check if this was a word completion (should trigger round restart)
                 if winning_guess.word.to_lowercase() == target_word.to_lowercase() {
                     // Word was guessed correctly - this should have started a new round
-                    let post_completion_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-                    
+                    let post_completion_state =
+                        setup.game_manager.get_game_state(&game_id).await.unwrap();
+
                     // Verify round incremented
                     assert!(
                         post_completion_state.current_round > initial_round,
@@ -509,27 +519,27 @@ async fn test_round_completion_starts_new_round() {
                         initial_round,
                         post_completion_state.current_round
                     );
-                    
+
                     // Verify we're back in guessing phase for new round
                     assert_eq!(
                         post_completion_state.current_phase,
                         GamePhase::Guessing,
                         "Should be back in collaborative guessing phase for new round"
                     );
-                    
+
                     // Verify official board was cleared for new round
                     assert!(
                         post_completion_state.official_board.is_empty(),
                         "Official board should be cleared for new round"
                     );
-                    
+
                     // Verify new word is different (though masked)
                     assert_eq!(
                         post_completion_state.word.len(),
                         post_completion_state.word_length as usize,
                         "New word should be properly masked"
                     );
-                    
+
                     round_completed = true;
                     break;
                 }
@@ -548,7 +558,7 @@ async fn test_round_completion_starts_new_round() {
             }
         }
     }
-    
+
     // If none of the common words worked, let's try individual guess phase
     if !round_completed {
         // Try to get to individual guess phase first
@@ -562,15 +572,16 @@ async fn test_round_completion_starts_new_round() {
                 } else {
                     *bob_conn
                 };
-                
+
                 let result = setup
                     .game_manager
                     .submit_guess(&game_id, winner_conn, target_word.to_string())
                     .await;
-                
+
                 if let Ok(GameEvent::RoundResult { winning_guess, .. }) = result {
                     if winning_guess.word.to_lowercase() == target_word.to_lowercase() {
-                        let post_completion_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
+                        let post_completion_state =
+                            setup.game_manager.get_game_state(&game_id).await.unwrap();
                         assert!(
                             post_completion_state.current_round > initial_round,
                             "Round should have incremented after individual word completion"
@@ -582,7 +593,10 @@ async fn test_round_completion_starts_new_round() {
             }
         }
     }
-    
-    println!("✅ Round completion logic validated: round_completed = {}", round_completed);
+
+    println!(
+        "✅ Round completion logic validated: round_completed = {}",
+        round_completed
+    );
     // Note: Even if we didn't complete a round, the test validates the structure is in place
 }

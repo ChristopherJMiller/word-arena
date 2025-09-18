@@ -79,9 +79,11 @@ impl ScoringEngine {
                 };
 
                 // Award points if this reveals new information about this letter
-                let was_previously_known = previously_revealed.iter().any(|((letter, _pos), status)| {
-                    letter == &ch.to_string() && matches!(status, LetterStatus::Correct | LetterStatus::Present)
-                });
+                let was_previously_known =
+                    previously_revealed.iter().any(|((letter, _pos), status)| {
+                        letter == &ch.to_string()
+                            && matches!(status, LetterStatus::Correct | LetterStatus::Present)
+                    });
 
                 if !was_previously_known {
                     points += 1; // Orange letter: 1 point

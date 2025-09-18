@@ -349,11 +349,12 @@ impl MessageHandler {
                 is_word_completed,
             } => {
                 // Get the current game state to determine the next phase
-                let next_phase = if let Some(game_state) = self.game_manager.get_game_state(game_id).await {
-                    game_state.current_phase
-                } else {
-                    game_types::GamePhase::Guessing // Fallback
-                };
+                let next_phase =
+                    if let Some(game_state) = self.game_manager.get_game_state(game_id).await {
+                        game_state.current_phase
+                    } else {
+                        game_types::GamePhase::Guessing // Fallback
+                    };
 
                 // Send winning guess to all players
                 let message = ServerMessage::RoundResult {
@@ -384,8 +385,14 @@ impl MessageHandler {
 
                 // After sending round results, send personalized game state updates
                 if let Some(updated_state) = self.game_manager.get_game_state(game_id).await {
-                    tracing::info!("Sending GameStateUpdate after RoundResult - phase: {:?}, current_winner: {:?}", updated_state.current_phase, updated_state.current_winner);
-                    self.connection_manager.send_personalized_game_state(game_id, &updated_state).await;
+                    tracing::info!(
+                        "Sending GameStateUpdate after RoundResult - phase: {:?}, current_winner: {:?}",
+                        updated_state.current_phase,
+                        updated_state.current_winner
+                    );
+                    self.connection_manager
+                        .send_personalized_game_state(game_id, &updated_state)
+                        .await;
                 }
             }
             GameEvent::GameOver {
@@ -397,9 +404,12 @@ impl MessageHandler {
                     game_id,
                     winner.display_name,
                     winner.points,
-                    final_scores.iter().map(|p| format!("{}: {}", p.display_name, p.points)).collect::<Vec<_>>()
+                    final_scores
+                        .iter()
+                        .map(|p| format!("{}: {}", p.display_name, p.points))
+                        .collect::<Vec<_>>()
                 );
-                
+
                 let message = ServerMessage::GameOver {
                     winner: winner.clone(),
                     final_scores: final_scores.clone(),
@@ -418,7 +428,9 @@ impl MessageHandler {
                 }
             }
             GameEvent::StateUpdate { state } => {
-                self.connection_manager.send_personalized_game_state(game_id, &state).await;
+                self.connection_manager
+                    .send_personalized_game_state(game_id, &state)
+                    .await;
             }
         }
 
@@ -520,9 +532,12 @@ impl MessageHandler {
 
                         // Send personalized initial game state
                         if let Some(ref game_state) = initial_game_state {
-                            if let Some(connection) = self.connection_manager.get_connection(player_id).await {
+                            if let Some(connection) =
+                                self.connection_manager.get_connection(player_id).await
+                            {
                                 if let Some(ref user) = connection.user {
-                                    let personalized_state = game_state.personalized_for_player(user.id);
+                                    let personalized_state =
+                                        game_state.personalized_for_player(user.id);
                                     if let Err(e) = self
                                         .connection_manager
                                         .send_to_connection(
@@ -533,7 +548,10 @@ impl MessageHandler {
                                         )
                                         .await
                                     {
-                                        warn!("Failed to send initial game state to {}: {}", player_id, e);
+                                        warn!(
+                                            "Failed to send initial game state to {}: {}",
+                                            player_id, e
+                                        );
                                     }
                                 }
                             }

@@ -1,4 +1,5 @@
 use chrono;
+use game_core::word_validation::WordValidator;
 use game_server::auth::AuthService;
 use game_server::game_manager::GameManager;
 use game_server::matchmaking::MatchmakingQueue;
@@ -42,9 +43,22 @@ pub struct TestGameServerSetup {
 impl TestGameServerSetup {
     pub fn new() -> Self {
         let connection_manager = Arc::new(ConnectionManager::new());
+
+        // Create a test word validator with known words for predictable testing
+        let test_words = vec![
+            "about", "above", "after", "again", "beach", "black", "brown", "chair", "close",
+            "early", "house", "place", "right", "round", "today", "which", "world", "wrong",
+            "guess", "first", "second", "third", "forth", "fifth", "sixth", "seven", "eight",
+        ];
+        let word_list = test_words.join("\n");
+        let word_validator = WordValidator::from_word_list(&word_list);
+
         Self {
             connection_manager: connection_manager.clone(),
-            game_manager: Arc::new(GameManager::new_with_default_words(connection_manager).unwrap()),
+            game_manager: Arc::new(GameManager::new_with_validator(
+                connection_manager,
+                word_validator,
+            )),
             matchmaking_queue: Arc::new(MatchmakingQueue::new()),
             auth_service: Arc::new(AuthService::new_dev_mode()),
         }

@@ -18,7 +18,8 @@ use std::sync::Arc;
 async fn test_complete_matchmaking_flow() {
     // Initialize test components
     let connection_manager = Arc::new(ConnectionManager::new());
-    let game_manager = Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
+    let game_manager =
+        Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
     let matchmaking_queue = Arc::new(MatchmakingQueue::new());
     let auth_service = Arc::new(AuthService::new_dev_mode());
 

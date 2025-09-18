@@ -20,7 +20,7 @@ impl WordValidator {
         }
 
         let mut all_words = HashSet::new();
-        
+
         // Read all .txt files in the directory
         let entries = fs::read_dir(dir)
             .map_err(|e| anyhow!("Failed to read directory {}: {}", dir.display(), e))?;
@@ -28,12 +28,12 @@ impl WordValidator {
         for entry in entries {
             let entry = entry.map_err(|e| anyhow!("Failed to read directory entry: {}", e))?;
             let path = entry.path();
-            
+
             // Only process .txt files
             if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
                 let content = fs::read_to_string(&path)
                     .map_err(|e| anyhow!("Failed to read file {}: {}", path.display(), e))?;
-                
+
                 // Parse words from this file using the same logic as the original constructor
                 let words_from_file: HashSet<String> = content
                     .lines()
@@ -41,16 +41,21 @@ impl WordValidator {
                     .map(|word| word.trim().to_lowercase())
                     .filter(|word| word.len() >= 5 && word.len() <= 8)
                     .collect();
-                
+
                 all_words.extend(words_from_file);
             }
         }
 
         if all_words.is_empty() {
-            return Err(anyhow!("No valid words found in .txt files in directory: {}", dir.display()));
+            return Err(anyhow!(
+                "No valid words found in .txt files in directory: {}",
+                dir.display()
+            ));
         }
 
-        Ok(Self { valid_words: all_words })
+        Ok(Self {
+            valid_words: all_words,
+        })
     }
 
     /// Create a new word validator from a word list string (for testing)
@@ -113,7 +118,7 @@ impl WordValidator {
         use std::hash::{Hash, Hasher};
         std::time::SystemTime::now().hash(&mut hasher);
         let random_length = 5 + ((hasher.finish() as usize) % 3); // 5-7
-        
+
         self.get_random_word(random_length)
     }
 }
@@ -268,7 +273,7 @@ mod tests {
     fn test_random_word_random_length() {
         let word_list = "apple\nbanana\ncherry\ntests\nvalid\nhello\nworld\nfreedom\nbuilding\nbeautiful\nextralong\nsuperlong";
         let validator = WordValidator::from_word_list(word_list);
-        
+
         // Test that random length returns valid words
         for _ in 0..20 {
             let word = validator.get_random_word_random_length().unwrap();
@@ -292,39 +297,39 @@ mod tests {
     #[test]
     fn test_from_directory() {
         use std::fs;
-        
+
         // Create a temporary directory for testing
         let temp_dir = std::env::temp_dir().join("word_arena_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create test files
         let file1_path = temp_dir.join("words1.txt");
         let file2_path = temp_dir.join("words2.txt");
         let non_txt_path = temp_dir.join("not_words.dat");
-        
+
         fs::write(&file1_path, "apple\nbanana\ncherry\n# comment\n\nfour").unwrap();
         fs::write(&file2_path, "tests\nvalid\nhello\nworld\n  spaced  ").unwrap();
         fs::write(&non_txt_path, "ignored\nwords").unwrap();
-        
+
         // Test loading from directory
         let validator = WordValidator::new(&temp_dir).unwrap();
-        
+
         // Words from file1
         assert!(validator.is_valid_word("apple"));
         assert!(validator.is_valid_word("banana"));
         assert!(validator.is_valid_word("cherry"));
         assert!(!validator.is_valid_word("four")); // too short
-        
+
         // Words from file2
         assert!(validator.is_valid_word("tests"));
         assert!(validator.is_valid_word("valid"));
         assert!(validator.is_valid_word("hello"));
         assert!(validator.is_valid_word("world"));
         assert!(validator.is_valid_word("spaced"));
-        
+
         // Words from non-txt file should not be loaded
         assert!(!validator.is_valid_word("ignored"));
-        
+
         // Clean up
         fs::remove_dir_all(&temp_dir).unwrap();
     }
@@ -333,25 +338,35 @@ mod tests {
     fn test_from_directory_nonexistent() {
         let result = WordValidator::new("/nonexistent/path");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Directory does not exist"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Directory does not exist")
+        );
     }
 
     #[test]
     fn test_from_directory_empty() {
         use std::fs;
-        
+
         // Create a temporary directory with no .txt files
         let temp_dir = std::env::temp_dir().join("word_arena_empty_test");
         fs::create_dir_all(&temp_dir).unwrap();
-        
+
         // Create a non-txt file
         let non_txt_path = temp_dir.join("not_words.dat");
         fs::write(&non_txt_path, "ignored\nwords").unwrap();
-        
+
         let result = WordValidator::new(&temp_dir);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No valid words found"));
-        
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No valid words found")
+        );
+
         // Clean up
         fs::remove_dir_all(&temp_dir).unwrap();
     }
@@ -361,14 +376,19 @@ mod tests {
         // Test passing a file path instead of directory
         let temp_dir = std::env::temp_dir().join("word_arena_file_test");
         std::fs::create_dir_all(&temp_dir).unwrap();
-        
+
         let file_path = temp_dir.join("test.txt");
         std::fs::write(&file_path, "test").unwrap();
-        
+
         let result = WordValidator::new(&file_path);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Path is not a directory"));
-        
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Path is not a directory")
+        );
+
         // Clean up
         std::fs::remove_dir_all(&temp_dir).unwrap();
     }

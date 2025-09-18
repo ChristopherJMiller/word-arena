@@ -299,7 +299,8 @@ mod integration_tests {
     async fn create_test_app()
     -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let connection_manager = Arc::new(ConnectionManager::new());
-        let game_manager = Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
+        let game_manager =
+            Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
         let auth_service = Arc::new(AuthService::new(
             "test-tenant".to_string(),
@@ -325,7 +326,15 @@ mod integration_tests {
     async fn create_dev_test_app()
     -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let connection_manager = Arc::new(ConnectionManager::new());
-        let game_manager = Arc::new(GameManager::new_with_default_words(connection_manager.clone()).unwrap());
+
+        // Create a test word validator with known words for predictable testing
+        let test_words = "about\nabove\nafter\nagain\nbeach\nblack\nbrown\nchair\nclose\nearly\nhouse\nplace\nright\nround\ntoday\nwhich\nworld\nwrong\nguess\nfirst\nsecond\nthird\nforth\nfifth\nsixth\nseven\neight";
+        let word_validator = game_core::word_validation::WordValidator::from_word_list(test_words);
+        let game_manager = Arc::new(GameManager::new_with_validator(
+            connection_manager.clone(),
+            word_validator,
+        ));
+
         let matchmaking_queue = Arc::new(MatchmakingQueue::new());
         let auth_service = Arc::new(AuthService::new_dev_mode());
 
