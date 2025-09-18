@@ -161,27 +161,45 @@ async fn test_duplicate_word_rejection() {
         _ => ("ABOUT", "AFTER"), // fallback
     };
 
-    // Play one complete round
-    let _event = play_round(
+    // Play one complete round to get a word onto the official board
+    let _round_event = play_round(
         &setup,
         &game_id,
         vec![(*alice_conn, word1), (*bob_conn, word2)],
     )
     .await
     .unwrap();
-
-    // Try to submit the same word that was already guessed
+    
+    // Verify there's now a word in the official board from the completed round
     let state = setup.game_manager.get_game_state(&game_id).await.unwrap();
+    assert!(!state.official_board.is_empty(), "Expected winning guess to be in the official board after round");
     
-    // Ensure there's at least one guess in the official board from the previous round
-    assert!(!state.official_board.is_empty(), "Expected at least one guess in the official board after playing a round");
+    // Get the word that was added to the official board (the winning word)
+    let winning_word = &state.official_board.last().unwrap().word;
     
-    let last_guess = state.official_board.last().unwrap();
-    let result = setup
-        .submit_guess(&game_id, *alice_conn, &last_guess.word)
-        .await;
+    // Now try to submit that same word again in the next phase
+    // This should fail because it was already guessed and is on the official board
     
-    assert!(result.is_err(), "Expected error when submitting duplicate word");
+    // Check who won the round so we know who can make the next guess
+    let current_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
+    
+    // Find out who made the winning guess by checking the official board
+    let winning_guess = state.official_board.last().unwrap();
+    let winning_player_id = winning_guess.player_id;
+    
+    // Find the connection for the winning player
+    let winning_connection = if current_state.players[0].user_id == winning_player_id {
+        *alice_conn
+    } else {
+        *bob_conn
+    };
+    
+    // The winner should be able to make the next guess, so let's try submitting 
+    // the same word that's already on the official board
+    let result = setup.submit_guess(&game_id, winning_connection, winning_word).await;
+    
+    // This should fail with "already guessed" because that word is on the official board
+    assert!(result.is_err(), "Expected error when submitting word that's already on the official board");
     let error_msg = result.unwrap_err().to_string();
     assert!(
         error_msg.contains("already guessed") || error_msg.contains("Word already guessed"),
