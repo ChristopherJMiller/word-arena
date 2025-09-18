@@ -35,9 +35,11 @@ services:
       - "8080"
     environment:
       - "DATABASE_URL=sqlite::memory:"
-      - RUST_LOG=info
+      - RUST_LOG=debug
       - WORDS_DIRECTORY=/app/word_lists
       - HOST=0.0.0.0
+      - AZURE_TENANT_ID=ee0a571a-7499-4994-b349-164a9150b094
+      - AZURE_CLIENT_ID=72da9d9f-22a6-45c3-82ec-7b214eca7590
     networks:
       - word-arena
 
