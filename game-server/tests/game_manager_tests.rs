@@ -170,16 +170,23 @@ async fn test_duplicate_word_rejection() {
     .await
     .unwrap();
 
-    // Try to submit the same word that was already guessed (assuming it was winning)
-    // Note: We need to check which word won first
+    // Try to submit the same word that was already guessed
     let state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-    if let Some(last_guess) = state.official_board.last() {
-        let result = setup
-            .submit_guess(&game_id, *alice_conn, &last_guess.word)
-            .await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("already guessed"));
-    }
+    
+    // Ensure there's at least one guess in the official board from the previous round
+    assert!(!state.official_board.is_empty(), "Expected at least one guess in the official board after playing a round");
+    
+    let last_guess = state.official_board.last().unwrap();
+    let result = setup
+        .submit_guess(&game_id, *alice_conn, &last_guess.word)
+        .await;
+    
+    assert!(result.is_err(), "Expected error when submitting duplicate word");
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+        error_msg.contains("already guessed") || error_msg.contains("Word already guessed"),
+        "Expected 'already guessed' error, got: '{}'", error_msg
+    );
 }
 
 #[tokio::test]
