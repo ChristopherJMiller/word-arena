@@ -46,6 +46,7 @@ COPY --from=builder /app/word_lists ./word_lists
 
 # Set environment variables
 ENV RUST_LOG=info
+ENV WORDS_DIRECTORY=/app/word_lists
 
 EXPOSE 8080
 
