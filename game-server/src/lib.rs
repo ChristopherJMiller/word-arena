@@ -328,8 +328,14 @@ mod integration_tests {
         let connection_manager = Arc::new(ConnectionManager::new());
 
         // Create a test word validator with known words for predictable testing
-        let test_words = "about\nabove\nafter\nagain\nbeach\nblack\nbrown\nchair\nclose\nearly\nhouse\nplace\nright\nround\ntoday\nwhich\nworld\nwrong\nguess\nfirst\nsecond\nthird\nforth\nfifth\nsixth\nseven\neight";
-        let word_validator = game_core::word_validation::WordValidator::from_word_list(test_words);
+        let test_words = vec![
+            "about", "above", "after", "again", "beach", "black", "brown", "chair",
+            "close", "early", "house", "place", "right", "round", "today", "which",
+            "world", "wrong", "guess", "first", "second", "third", "forth", "fifth",
+            "sixth", "seven", "eight"
+        ];
+        let word_list = test_words.join("\n");
+        let word_validator = game_core::word_validation::WordValidator::from_word_list(&word_list);
         let game_manager = Arc::new(GameManager::new_with_validator(
             connection_manager.clone(),
             word_validator,
