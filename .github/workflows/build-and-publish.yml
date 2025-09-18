@@ -86,7 +86,7 @@ jobs:
         VITE_AZURE_CLIENT_ID: ${{ github.event.inputs.azure_client_id || secrets.AZURE_CLIENT_ID || '72da9d9f-22a6-45c3-82ec-7b214eca7590' }}
         VITE_AZURE_TENANT_ID: ${{ github.event.inputs.azure_tenant_id || secrets.AZURE_TENANT_ID || 'ee0a571a-7499-4994-b349-164a9150b094' }}
         VITE_AUTH_DEV_MODE: ${{ github.event.inputs.auth_dev_mode || 'false' }}
-        VITE_WS_URL: ${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'ws://localhost:8080/ws' }}
+        VITE_WS_URL: ${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'wss://wordarena.chrismiller.xyz/ws' }}
       run: npm run build:frontend
 
     - name: Log in to Container Registry
@@ -120,7 +120,7 @@ jobs:
           VITE_AZURE_CLIENT_ID=${{ github.event.inputs.azure_client_id || secrets.AZURE_CLIENT_ID || '72da9d9f-22a6-45c3-82ec-7b214eca7590' }}
           VITE_AZURE_TENANT_ID=${{ github.event.inputs.azure_tenant_id || secrets.AZURE_TENANT_ID || 'ee0a571a-7499-4994-b349-164a9150b094' }}
           VITE_AUTH_DEV_MODE=${{ github.event.inputs.auth_dev_mode || 'false' }}
-          VITE_WS_URL=${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'ws://localhost:8080/ws' }}
+          VITE_WS_URL=${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'wss://wordarena.chrismiller.xyz/ws' }}
 
   build-backend:
     runs-on: ubuntu-latest
