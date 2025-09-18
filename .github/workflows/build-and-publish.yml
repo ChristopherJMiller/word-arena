@@ -1,10 +1,45 @@
 name: Build and Publish Docker Images
 
+# This workflow builds and publishes Docker images for both frontend and backend.
+# It can be triggered manually with custom Azure configuration inputs.
+#
+# Manual trigger usage:
+# - Go to Actions tab in GitHub
+# - Select "Build and Publish Docker Images" workflow
+# - Click "Run workflow"
+# - Fill in the Azure configuration as needed:
+#   - azure_client_id: Your Azure AD Application (Client) ID
+#   - azure_tenant_id: Your Azure AD Directory (Tenant) ID or 'common'
+#   - auth_dev_mode: Set to true for development builds
+#   - websocket_url: Backend WebSocket URL for production deployment
+
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      azure_client_id:
+        description: 'Azure AD Client ID'
+        required: false
+        default: '72da9d9f-22a6-45c3-82ec-7b214eca7590'
+        type: string
+      azure_tenant_id:
+        description: 'Azure AD Tenant ID'
+        required: false
+        default: 'ee0a571a-7499-4994-b349-164a9150b094'
+        type: string
+      auth_dev_mode:
+        description: 'Enable development authentication mode'
+        required: false
+        default: false
+        type: boolean
+      websocket_url:
+        description: 'WebSocket URL for the backend'
+        required: false
+        default: ''
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -47,6 +82,11 @@ jobs:
 
 
     - name: Build frontend
+      env:
+        VITE_AZURE_CLIENT_ID: ${{ github.event.inputs.azure_client_id || secrets.AZURE_CLIENT_ID || '72da9d9f-22a6-45c3-82ec-7b214eca7590' }}
+        VITE_AZURE_TENANT_ID: ${{ github.event.inputs.azure_tenant_id || secrets.AZURE_TENANT_ID || 'ee0a571a-7499-4994-b349-164a9150b094' }}
+        VITE_AUTH_DEV_MODE: ${{ github.event.inputs.auth_dev_mode || 'false' }}
+        VITE_WS_URL: ${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'ws://localhost:8080/ws' }}
       run: npm run build:frontend
 
     - name: Log in to Container Registry
@@ -76,6 +116,11 @@ jobs:
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VITE_AZURE_CLIENT_ID=${{ github.event.inputs.azure_client_id || secrets.AZURE_CLIENT_ID || '72da9d9f-22a6-45c3-82ec-7b214eca7590' }}
+          VITE_AZURE_TENANT_ID=${{ github.event.inputs.azure_tenant_id || secrets.AZURE_TENANT_ID || 'ee0a571a-7499-4994-b349-164a9150b094' }}
+          VITE_AUTH_DEV_MODE=${{ github.event.inputs.auth_dev_mode || 'false' }}
+          VITE_WS_URL=${{ github.event.inputs.websocket_url || secrets.WEBSOCKET_URL || 'ws://localhost:8080/ws' }}
 
   build-backend:
     runs-on: ubuntu-latest

@@ -1,6 +1,18 @@
 # Frontend Dockerfile
 FROM node:20-alpine AS builder
 
+# Accept build arguments for environment configuration
+ARG VITE_AZURE_CLIENT_ID=dev-client-id
+ARG VITE_AZURE_TENANT_ID=common
+ARG VITE_AUTH_DEV_MODE=false
+ARG VITE_WS_URL=ws://localhost:8080/ws
+
+# Set environment variables from build args
+ENV VITE_AZURE_CLIENT_ID=${VITE_AZURE_CLIENT_ID}
+ENV VITE_AZURE_TENANT_ID=${VITE_AZURE_TENANT_ID}
+ENV VITE_AUTH_DEV_MODE=${VITE_AUTH_DEV_MODE}
+ENV VITE_WS_URL=${VITE_WS_URL}
+
 # Install Rust for type generation
 RUN apk add --no-cache curl build-base
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
