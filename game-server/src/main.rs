@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
+use tokio::signal;
 
 use game_persistence::{connection::connect_and_migrate, repositories::UserRepository};
 use game_server::{
@@ -93,10 +94,36 @@ async fn main() {
 
     info!("Server starting on {}:{}", config.host, config.port);
 
-    warp::serve(routes)
-        .run((
-            config.host.parse::<std::net::IpAddr>().unwrap(),
-            config.port,
-        ))
-        .await;
+    let addr = (
+        config.host.parse::<std::net::IpAddr>().unwrap(),
+        config.port,
+    );
+
+    let (addr, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async {
+        // Wait for SIGINT (Ctrl+C) or SIGTERM
+        #[cfg(unix)]
+        {
+            let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
+            let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
+            
+            tokio::select! {
+                _ = sigint.recv() => {
+                    info!("Received SIGINT, shutting down gracefully...");
+                }
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, shutting down gracefully...");
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            signal::ctrl_c().await.expect("Failed to listen for ctrl+c");
+            info!("Received Ctrl+C, shutting down gracefully...");
+        }
+    });
+
+    info!("Server started successfully on {}. Press Ctrl+C to stop.", addr);
+    server.await;
+    info!("Server shutdown complete.");
 }

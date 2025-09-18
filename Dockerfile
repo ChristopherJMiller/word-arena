@@ -28,19 +28,23 @@ RUN chmod +x scripts/download_and_split_words.sh && \
 # Build the application
 RUN cargo build --release --bin game-server
 
-# Runtime stage - use distroless for security
-FROM gcr.io/distroless/cc-debian12
+# Runtime stage - use debian slim for SQLite compatibility
+FROM debian:bookworm-slim
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 # Copy the binary
 COPY --from=builder /app/target/release/game-server /app/game-server
 
-# Copy word lists if they exist
-COPY word_lists ./word_lists
+# Copy word lists from build stage
+COPY --from=builder /app/word_lists ./word_lists
 
 # Set environment variables
-ENV DATABASE_URL=sqlite:///app/data/word_arena.db
 ENV RUST_LOG=info
 
 EXPOSE 8080
