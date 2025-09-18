@@ -88,15 +88,21 @@ impl AuthService {
         })?;
 
         // Get or fetch the public key
+        tracing::debug!("Fetching decoding key for kid: {}", kid);
         let decoding_key = self.get_decoding_key(&kid).await?;
 
         // Validate the token
         let mut validation = Validation::new(Algorithm::RS256);
-        validation.set_audience(&[&self.client_id]);
-        validation.set_issuer(&[&format!(
-            "https://login.microsoftonline.com/{}/v2.0",
-            self.tenant_id
-        )]);
+        // Microsoft Graph audience for Azure AD tokens
+        validation.set_audience(&["00000003-0000-0000-c000-000000000000"]);
+        
+        // Support both v1.0 and v2.0 issuer formats
+        let v1_issuer = format!("https://sts.windows.net/{}/", self.tenant_id);
+        let v2_issuer = format!("https://login.microsoftonline.com/{}/v2.0", self.tenant_id);
+        validation.set_issuer(&[&v1_issuer, &v2_issuer]);
+        
+        tracing::debug!("Validating token with audience: 00000003-0000-0000-c000-000000000000");
+        tracing::debug!("Accepted issuers: {} and {}", v1_issuer, v2_issuer);
 
         let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
             .map_err(|e| {
@@ -106,6 +112,11 @@ impl AuthService {
 
         let claims = token_data.claims;
 
+        tracing::debug!("Token claims - aud: {}, iss: {}", claims.aud, claims.iss);
+        if let Some(ref oid) = claims.oid {
+            tracing::debug!("User oid: {}", oid);
+        }
+
         // Verify token is not expired
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -113,6 +124,7 @@ impl AuthService {
             .as_secs();
 
         if claims.exp < now {
+            tracing::warn!("Token expired: exp={}, now={}", claims.exp, now);
             return Err(AuthError::TokenExpired);
         }
 
@@ -153,6 +165,7 @@ impl AuthService {
             "https://login.microsoftonline.com/{}/discovery/v2.0/keys",
             self.tenant_id
         );
+        tracing::debug!("Fetching JWKS from: {}", jwks_url);
 
         let response = self
             .client
