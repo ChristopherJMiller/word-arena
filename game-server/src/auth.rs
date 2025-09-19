@@ -95,13 +95,26 @@ impl AuthService {
         // Use our app's client ID as the audience (not Microsoft Graph)
         validation.set_audience(&[&self.client_id]);
         
-        // Support both v1.0 and v2.0 issuer formats
-        let v1_issuer = format!("https://sts.windows.net/{}/", self.tenant_id);
-        let v2_issuer = format!("https://login.microsoftonline.com/{}/v2.0", self.tenant_id);
-        validation.set_issuer(&[&v1_issuer, &v2_issuer]);
+        // Handle issuer validation based on tenant type
+        let is_common_tenant = self.tenant_id == "common";
+        if is_common_tenant {
+            // For common tenant, use dangerous validation without issuer check
+            validation = Validation::new(Algorithm::RS256);
+            validation.set_audience(&[&self.client_id]);
+            validation.validate_exp = true;
+            validation.validate_nbf = true;
+            validation.validate_aud = true;
+            // Don't set issuer - will manually validate
+            tracing::debug!("Using common tenant - will manually validate Microsoft issuer");
+        } else {
+            // For specific tenant, validate against expected issuer formats
+            let v1_issuer = format!("https://sts.windows.net/{}/", self.tenant_id);
+            let v2_issuer = format!("https://login.microsoftonline.com/{}/v2.0", self.tenant_id);
+            validation.set_issuer(&[&v1_issuer, &v2_issuer]);
+            tracing::debug!("Accepted issuers: {} and {}", v1_issuer, v2_issuer);
+        }
         
         tracing::debug!("Validating token with audience: {}", self.client_id);
-        tracing::debug!("Accepted issuers: {} and {}", v1_issuer, v2_issuer);
 
         let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
             .map_err(|e| {
@@ -123,6 +136,17 @@ impl AuthService {
         tracing::debug!("Token claims - aud: {}, iss: {}", claims.aud, claims.iss);
         if let Some(ref oid) = claims.oid {
             tracing::debug!("User oid: {}", oid);
+        }
+
+        // Manual issuer validation for common tenant
+        if is_common_tenant {
+            let valid_issuer = claims.iss.starts_with("https://sts.windows.net/") || 
+                               claims.iss.starts_with("https://login.microsoftonline.com/");
+            if !valid_issuer {
+                tracing::warn!("Invalid issuer for common tenant: {}", claims.iss);
+                return Err(AuthError::InvalidToken);
+            }
+            tracing::debug!("Valid Microsoft issuer: {}", claims.iss);
         }
 
         // Verify token is not expired
