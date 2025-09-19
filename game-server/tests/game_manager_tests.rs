@@ -153,7 +153,7 @@ async fn test_duplicate_word_rejection() {
     // Get the target word length and select appropriate words
     let initial_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
     let target_length = initial_state.word_length as usize;
-    
+
     let (word1, word2) = match target_length {
         5 => ("ABOUT", "AFTER"),
         6 => ("SECOND", "FOURTH"),
@@ -169,41 +169,50 @@ async fn test_duplicate_word_rejection() {
     )
     .await
     .unwrap();
-    
+
     // Verify there's now a word in the official board from the completed round
     let state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-    assert!(!state.official_board.is_empty(), "Expected winning guess to be in the official board after round");
-    
+    assert!(
+        !state.official_board.is_empty(),
+        "Expected winning guess to be in the official board after round"
+    );
+
     // Get the word that was added to the official board (the winning word)
     let winning_word = &state.official_board.last().unwrap().word;
-    
+
     // Now try to submit that same word again in the next phase
     // This should fail because it was already guessed and is on the official board
-    
+
     // Check who won the round so we know who can make the next guess
     let current_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-    
+
     // Find out who made the winning guess by checking the official board
     let winning_guess = state.official_board.last().unwrap();
-    let winning_player_id = winning_guess.player_id;
-    
+    let winning_player_id = winning_guess.player_id.clone();
+
     // Find the connection for the winning player
     let winning_connection = if current_state.players[0].user_id == winning_player_id {
         *alice_conn
     } else {
         *bob_conn
     };
-    
-    // The winner should be able to make the next guess, so let's try submitting 
+
+    // The winner should be able to make the next guess, so let's try submitting
     // the same word that's already on the official board
-    let result = setup.submit_guess(&game_id, winning_connection, winning_word).await;
-    
+    let result = setup
+        .submit_guess(&game_id, winning_connection, winning_word)
+        .await;
+
     // This should fail with "already guessed" because that word is on the official board
-    assert!(result.is_err(), "Expected error when submitting word that's already on the official board");
+    assert!(
+        result.is_err(),
+        "Expected error when submitting word that's already on the official board"
+    );
     let error_msg = result.unwrap_err().to_string();
     assert!(
         error_msg.contains("already guessed") || error_msg.contains("Word already guessed"),
-        "Expected 'already guessed' error, got: '{}'", error_msg
+        "Expected 'already guessed' error, got: '{}'",
+        error_msg
     );
 }
 
@@ -314,10 +323,14 @@ async fn test_game_state_progression() {
 
     // Check state after round
     let after_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-    
-    println!("After state: round={}, official_board_len={}, phase={:?}, status={:?}", 
-             after_state.current_round, after_state.official_board.len(), 
-             after_state.current_phase, after_state.status);
+
+    println!(
+        "After state: round={}, official_board_len={}, phase={:?}, status={:?}",
+        after_state.current_round,
+        after_state.official_board.len(),
+        after_state.current_phase,
+        after_state.status
+    );
 
     // Either game is over or round incremented
     match after_state.status {
@@ -329,13 +342,14 @@ async fn test_game_state_progression() {
             let round_progressed = after_state.current_round >= 2;
             let in_individual_phase = after_state.current_phase == GamePhase::IndividualGuess;
             let has_official_board_entries = after_state.official_board.len() >= 1;
-            
+
             assert!(
                 round_progressed || in_individual_phase,
                 "Expected round to progress or be in individual phase. Round: {}, Phase: {:?}",
-                after_state.current_round, after_state.current_phase
+                after_state.current_round,
+                after_state.current_phase
             );
-            
+
             // If we got a RoundResult (not GameOver), there should be something on the board
             if matches!(round_event, GameEvent::RoundResult { .. }) {
                 assert!(
@@ -360,11 +374,17 @@ async fn test_game_continues_with_valid_words() {
     // Get the target word length and select appropriate words
     let initial_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
     let target_length = initial_state.word_length as usize;
-    
+
     let valid_words = match target_length {
-        5 => vec!["ABOUT", "ABOVE", "AFTER", "AGAIN", "BEACH", "BLACK", "BROWN", "CHAIR"],
-        6 => vec!["SECOND", "FOURTH", "BEFORE", "FRIEND", "LETTER", "NUMBER", "PEOPLE", "SHOULD"],
-        7 => vec!["EXAMPLE", "NOTHING", "ANOTHER", "WITHOUT", "BETWEEN", "THROUGH", "BECAUSE", "AGAINST"],
+        5 => vec![
+            "ABOUT", "ABOVE", "AFTER", "AGAIN", "BEACH", "BLACK", "BROWN", "CHAIR",
+        ],
+        6 => vec![
+            "SECOND", "FOURTH", "BEFORE", "FRIEND", "LETTER", "NUMBER", "PEOPLE", "SHOULD",
+        ],
+        7 => vec![
+            "EXAMPLE", "NOTHING", "ANOTHER", "WITHOUT", "BETWEEN", "THROUGH", "BECAUSE", "AGAINST",
+        ],
         _ => vec!["ABOUT", "ABOVE", "AFTER", "AGAIN"], // fallback
     };
     let mut round_count = 0;
@@ -382,7 +402,7 @@ async fn test_game_continues_with_valid_words() {
 
         let event = if current_state.current_phase == GamePhase::IndividualGuess {
             // Individual guess phase - only winner can guess
-            let winner_id = current_state.current_winner.unwrap();
+            let winner_id = current_state.current_winner.as_ref().unwrap().clone();
             let winner_conn = if current_state.players[0].user_id == winner_id {
                 *alice_conn
             } else {
@@ -437,17 +457,21 @@ async fn test_game_continues_with_valid_words() {
     // If we get here, we played several rounds successfully
     // Verify the game state is consistent - the main goal is that we can play multiple rounds
     let final_state = setup.game_manager.get_game_state(&game_id).await.unwrap();
-    
-    // We should have played at least some rounds 
+
+    // We should have played at least some rounds
     assert!(round_count > 0, "Should have played at least one round");
-    
+
     // The board might be cleared between rounds during word completion, so we just check general progress
     // If word completion happened, the round count would advance, but since we're testing with random words,
     // word completion is unlikely. The main goal is testing that the game continues processing valid words.
     // So we just verify that the game state is consistent and rounds can be processed.
-    
+
     // The game should still be active (not in error state)
-    assert_eq!(final_state.status, GameStatus::Active, "Game should remain active");
+    assert_eq!(
+        final_state.status,
+        GameStatus::Active,
+        "Game should remain active"
+    );
 
     // This validates that the round processing works correctly
     println!(
@@ -550,9 +574,19 @@ async fn test_round_completion_starts_new_round() {
     // Get ALL possible target words based on the target word length (from our test word list)
     let target_length = initial_state.word_length as usize;
     let common_words = match target_length {
-        5 => vec!["ABOUT", "ABOVE", "AFTER", "AGAIN", "BEACH", "BLACK", "BROWN", "CHAIR", "CLOSE", "EARLY", "HOUSE", "PLACE", "RIGHT", "ROUND", "TODAY", "WHICH", "WORLD", "WRONG", "GUESS", "FIRST", "THIRD", "FORTH", "FIFTH", "SIXTH", "SEVEN", "EIGHT"],
-        6 => vec!["SECOND", "FOURTH", "BEFORE", "FRIEND", "LETTER", "NUMBER", "PEOPLE", "SHOULD", "AROUND", "CHANGE", "BETTER", "LITTLE", "MYSELF", "FAMILY", "SCHOOL", "MOTHER"],
-        7 => vec!["EXAMPLE", "NOTHING", "ANOTHER", "WITHOUT", "BETWEEN", "THROUGH", "BECAUSE", "AGAINST", "THOUGHT", "PROBLEM", "COMPANY", "SERVICE", "PROGRAM", "ALREADY", "BELIEVE", "PRODUCE"],
+        5 => vec![
+            "ABOUT", "ABOVE", "AFTER", "AGAIN", "BEACH", "BLACK", "BROWN", "CHAIR", "CLOSE",
+            "EARLY", "HOUSE", "PLACE", "RIGHT", "ROUND", "TODAY", "WHICH", "WORLD", "WRONG",
+            "GUESS", "FIRST", "THIRD", "FORTH", "FIFTH", "SIXTH", "SEVEN", "EIGHT",
+        ],
+        6 => vec![
+            "SECOND", "FOURTH", "BEFORE", "FRIEND", "LETTER", "NUMBER", "PEOPLE", "SHOULD",
+            "AROUND", "CHANGE", "BETTER", "LITTLE", "MYSELF", "FAMILY", "SCHOOL", "MOTHER",
+        ],
+        7 => vec![
+            "EXAMPLE", "NOTHING", "ANOTHER", "WITHOUT", "BETWEEN", "THROUGH", "BECAUSE", "AGAINST",
+            "THOUGHT", "PROBLEM", "COMPANY", "SERVICE", "PROGRAM", "ALREADY", "BELIEVE", "PRODUCE",
+        ],
         _ => vec!["ABOUT", "AFTER", "WORLD", "HOUSE"], // fallback
     };
 
@@ -572,7 +606,7 @@ async fn test_round_completion_starts_new_round() {
             .await
         } else if current_state.current_phase == GamePhase::IndividualGuess {
             // Try individual guessing
-            let winner_id = current_state.current_winner.unwrap();
+            let winner_id = current_state.current_winner.as_ref().unwrap().clone();
             let winner_conn = if current_state.players[0].user_id == winner_id {
                 *alice_conn
             } else {
@@ -589,7 +623,11 @@ async fn test_round_completion_starts_new_round() {
         };
 
         match event {
-            Ok(GameEvent::RoundResult { winning_guess, is_word_completed, .. }) => {
+            Ok(GameEvent::RoundResult {
+                winning_guess,
+                is_word_completed,
+                ..
+            }) => {
                 // Check if this was a word completion (should trigger round restart)
                 if is_word_completed {
                     // Word was guessed correctly - this should have started a new round
@@ -650,7 +688,7 @@ async fn test_round_completion_starts_new_round() {
         if state.current_phase == GamePhase::IndividualGuess {
             // Try individual guess with target words
             for target_word in &common_words {
-                let winner_id = state.current_winner.unwrap();
+                let winner_id = state.current_winner.as_ref().unwrap().clone();
                 let winner_conn = if state.players[0].user_id == winner_id {
                     *alice_conn
                 } else {

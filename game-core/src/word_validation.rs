@@ -65,14 +65,14 @@ impl WordValidator {
             "about", "above", "after", "again", "beach", "black", "brown", "chair", "close",
             "early", "house", "place", "right", "round", "today", "which", "world", "wrong",
             "guess", "first", "third", "forth", "fifth", "sixth", "seven", "eight",
-            // 6-letter words  
+            // 6-letter words
             "second", "fourth", "before", "friend", "letter", "number", "people", "should",
             "around", "change", "better", "little", "myself", "family", "school", "mother",
             // 7-letter words
             "example", "nothing", "another", "without", "between", "through", "because", "against",
-            "thought", "problem", "company", "service", "program", "already", "believe", "produce"
+            "thought", "problem", "company", "service", "program", "already", "believe", "produce",
         ];
-        
+
         let word_list = test_words.join("\n");
         Self::from_word_list(&word_list)
     }

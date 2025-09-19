@@ -1,6 +1,6 @@
+use crate::{GameId, PlayerId};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use uuid::Uuid;
 
 use crate::user::Player;
 
@@ -8,7 +8,7 @@ use crate::user::Player;
 #[ts(export)]
 pub struct RoundCompletion {
     pub word: String,
-    pub player_id: Uuid,
+    pub player_id: PlayerId,
     pub points_earned: i32,
 }
 
@@ -22,7 +22,7 @@ pub enum RoundResult {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct GameState {
-    pub id: Uuid,
+    pub id: GameId,
     pub word: String,
     pub word_length: i32,
     pub current_round: i32,
@@ -30,7 +30,7 @@ pub struct GameState {
     pub current_phase: GamePhase,
     pub players: Vec<Player>,
     pub official_board: Vec<GuessResult>,
-    pub current_winner: Option<Uuid>,
+    pub current_winner: Option<PlayerId>,
     pub created_at: String,   // ISO 8601 string
     pub point_threshold: i32, // Configurable win condition
 }
@@ -40,14 +40,14 @@ pub struct GameState {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct SafeGameState {
-    pub id: Uuid,
+    pub id: GameId,
     pub word_length: i32,
     pub current_round: i32,
     pub status: GameStatus,
     pub current_phase: GamePhase,
     pub players: Vec<Player>,
     pub official_board: Vec<GuessResult>,
-    pub current_winner: Option<Uuid>,
+    pub current_winner: Option<PlayerId>,
     pub created_at: String,
     pub point_threshold: i32,
 }
@@ -55,14 +55,14 @@ pub struct SafeGameState {
 impl From<&GameState> for SafeGameState {
     fn from(game_state: &GameState) -> Self {
         SafeGameState {
-            id: game_state.id,
+            id: game_state.id.clone(),
             word_length: game_state.word_length,
             current_round: game_state.current_round,
             status: game_state.status.clone(),
             current_phase: game_state.current_phase.clone(),
             players: game_state.players.clone(),
             official_board: game_state.official_board.clone(),
-            current_winner: game_state.current_winner,
+            current_winner: game_state.current_winner.clone(),
             created_at: game_state.created_at.clone(),
             point_threshold: game_state.point_threshold,
         }
@@ -72,7 +72,7 @@ impl From<&GameState> for SafeGameState {
 impl GameState {
     /// Create a personalized version of the game state for a specific player
     /// Only includes that player's guess history, while other players' histories are cleared
-    pub fn personalized_for_player(&self, player_id: uuid::Uuid) -> Self {
+    pub fn personalized_for_player(&self, player_id: PlayerId) -> Self {
         let filtered_players = self
             .players
             .iter()
@@ -83,7 +83,7 @@ impl GameState {
                 } else {
                     // For other players, clear their guess history to protect privacy
                     Player {
-                        user_id: player.user_id,
+                        user_id: player.user_id.clone(),
                         display_name: player.display_name.clone(),
                         points: player.points,
                         guess_history: Vec::new(), // Clear other players' guess histories
@@ -94,7 +94,7 @@ impl GameState {
             .collect();
 
         GameState {
-            id: self.id,
+            id: self.id.clone(),
             word: self.word.clone(),
             word_length: self.word_length,
             current_round: self.current_round,
@@ -102,7 +102,7 @@ impl GameState {
             current_phase: self.current_phase.clone(),
             players: filtered_players,
             official_board: self.official_board.clone(),
-            current_winner: self.current_winner,
+            current_winner: self.current_winner.clone(),
             created_at: self.created_at.clone(),
             point_threshold: self.point_threshold,
         }
@@ -135,7 +135,7 @@ pub enum GamePhase {
 #[ts(export)]
 pub struct GuessResult {
     pub word: String,
-    pub player_id: Uuid,
+    pub player_id: PlayerId,
     pub letters: Vec<LetterResult>,
     pub points_earned: i32,
     pub timestamp: String, // ISO 8601 string

@@ -12,6 +12,7 @@ export class WebSocketService {
   private authToken: string | null = null;
   private sessionDisconnectedHandler?: () => void;
   private authenticatedUser: any = null;
+  private authSuccessHandler?: (user: any) => void;
 
   constructor(private url: string) {}
 
@@ -75,6 +76,9 @@ export class WebSocketService {
           if ("AuthenticationSuccess" in message) {
             this.isAuthenticated = true;
             this.authenticatedUser = message.AuthenticationSuccess.user;
+            if (this.authSuccessHandler) {
+              this.authSuccessHandler(message.AuthenticationSuccess.user);
+            }
             this.removeMessageHandler(authHandler);
             resolve(true);
           } else if ("AuthenticationFailed" in message) {
@@ -157,6 +161,10 @@ export class WebSocketService {
 
   setSessionDisconnectedHandler(handler: () => void) {
     this.sessionDisconnectedHandler = handler;
+  }
+
+  setAuthSuccessHandler(handler: (user: any) => void) {
+    this.authSuccessHandler = handler;
   }
 
   private async handleReconnection() {

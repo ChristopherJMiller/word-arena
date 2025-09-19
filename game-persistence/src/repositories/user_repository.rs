@@ -3,10 +3,9 @@ use sea_orm::{
     ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
     QuerySelect,
 };
-use uuid::Uuid;
 
 use crate::entities::{prelude::*, users};
-use game_types::User;
+use game_types::{PlayerId, User};
 
 pub struct UserRepository {
     db: DatabaseConnection,
@@ -35,7 +34,7 @@ impl UserRepository {
         }
     }
 
-    pub async fn find_by_id(&self, id: Uuid) -> Result<Option<User>> {
+    pub async fn find_by_id(&self, id: &PlayerId) -> Result<Option<User>> {
         let user_model = Users::find_by_id(id).one(&self.db).await?;
         Ok(user_model.map(Self::model_to_user))
     }
@@ -78,7 +77,7 @@ impl UserRepository {
 
     pub async fn update_user_stats(
         &self,
-        user_id: Uuid,
+        user_id: &PlayerId,
         points_gained: i32,
         won: bool,
     ) -> Result<()> {
@@ -121,7 +120,7 @@ impl UserRepository {
         Ok(leaderboard)
     }
 
-    pub async fn get_user_rank(&self, user_id: Uuid) -> Result<Option<u32>> {
+    pub async fn get_user_rank(&self, user_id: &PlayerId) -> Result<Option<u32>> {
         let user = Users::find_by_id(user_id).one(&self.db).await?;
 
         if let Some(user_model) = user {
@@ -142,7 +141,6 @@ mod tests {
     use super::*;
     use crate::connection::connect_to_memory_database;
     use migration::{Migrator, MigratorTrait};
-    use uuid::Uuid;
 
     async fn setup_test_db() -> UserRepository {
         let db = connect_to_memory_database().await.unwrap();
@@ -154,9 +152,9 @@ mod tests {
     async fn test_create_and_find_user() {
         let repo = setup_test_db().await;
 
-        let user_id = Uuid::new_v4();
+        let user_id = "test-user-id";
         let user = User {
-            id: user_id,
+            id: user_id.to_string(),
             email: "test@example.com".to_string(),
             display_name: "Test User".to_string(),
             total_points: 0,
@@ -171,7 +169,11 @@ mod tests {
         assert_eq!(created_user.display_name, user.display_name);
 
         // Find by ID
-        let found_user = repo.find_by_id(user_id).await.unwrap().unwrap();
+        let found_user = repo
+            .find_by_id(&user_id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(found_user.email, user.email);
 
         // Find by email
@@ -183,9 +185,9 @@ mod tests {
     async fn test_update_user_stats() {
         let repo = setup_test_db().await;
 
-        let user_id = Uuid::new_v4();
+        let user_id = "test-user-stats";
         let user = User {
-            id: user_id,
+            id: user_id.to_string(),
             email: "test@example.com".to_string(),
             display_name: "Test User".to_string(),
             total_points: 10,
@@ -197,9 +199,15 @@ mod tests {
         repo.create_user(user).await.unwrap();
 
         // Update stats (won game with 5 points)
-        repo.update_user_stats(user_id, 5, true).await.unwrap();
+        repo.update_user_stats(&user_id.to_string(), 5, true)
+            .await
+            .unwrap();
 
-        let updated_user = repo.find_by_id(user_id).await.unwrap().unwrap();
+        let updated_user = repo
+            .find_by_id(&user_id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated_user.total_points, 15);
         assert_eq!(updated_user.total_wins, 2);
         assert_eq!(updated_user.total_games, 3);
@@ -212,7 +220,7 @@ mod tests {
         // Create test users with different scores
         let users = vec![
             User {
-                id: Uuid::new_v4(),
+                id: "test-user-1".to_string(),
                 email: "user1@example.com".to_string(),
                 display_name: "User One".to_string(),
                 total_points: 100,
@@ -221,7 +229,7 @@ mod tests {
                 created_at: chrono::Utc::now().to_rfc3339(),
             },
             User {
-                id: Uuid::new_v4(),
+                id: "test-user-2".to_string(),
                 email: "user2@example.com".to_string(),
                 display_name: "User Two".to_string(),
                 total_points: 200,
@@ -230,7 +238,7 @@ mod tests {
                 created_at: chrono::Utc::now().to_rfc3339(),
             },
             User {
-                id: Uuid::new_v4(),
+                id: "test-user-3".to_string(),
                 email: "user3@example.com".to_string(),
                 display_name: "User Three".to_string(),
                 total_points: 50,
@@ -268,7 +276,7 @@ mod tests {
 
         let users = vec![
             User {
-                id: Uuid::new_v4(),
+                id: "test-rank-user-1".to_string(),
                 email: "user1@example.com".to_string(),
                 display_name: "User One".to_string(),
                 total_points: 100,
@@ -277,7 +285,7 @@ mod tests {
                 created_at: chrono::Utc::now().to_rfc3339(),
             },
             User {
-                id: Uuid::new_v4(),
+                id: "test-rank-user-2".to_string(),
                 email: "user2@example.com".to_string(),
                 display_name: "User Two".to_string(),
                 total_points: 200,
@@ -292,15 +300,18 @@ mod tests {
         }
 
         // User with 200 points should be rank 1
-        let rank = repo.get_user_rank(users[1].id).await.unwrap().unwrap();
+        let rank = repo.get_user_rank(&users[1].id).await.unwrap().unwrap();
         assert_eq!(rank, 1);
 
         // User with 100 points should be rank 2
-        let rank = repo.get_user_rank(users[0].id).await.unwrap().unwrap();
+        let rank = repo.get_user_rank(&users[0].id).await.unwrap().unwrap();
         assert_eq!(rank, 2);
 
         // Non-existent user should return None
-        let rank = repo.get_user_rank(Uuid::new_v4()).await.unwrap();
+        let rank = repo
+            .get_user_rank(&"nonexistent-user".to_string())
+            .await
+            .unwrap();
         assert_eq!(rank, None);
     }
 
@@ -311,7 +322,7 @@ mod tests {
         // Create 5 users
         for i in 1..=5 {
             let user = User {
-                id: Uuid::new_v4(),
+                id: format!("test-limit-user-{}", i),
                 email: format!("user{}@example.com", i),
                 display_name: format!("User {}", i),
                 total_points: i * 10,

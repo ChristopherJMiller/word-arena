@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::info;
 use tokio::signal;
+use tracing::info;
 
 use game_persistence::{connection::connect_and_migrate, repositories::UserRepository};
 use game_server::{
@@ -105,7 +105,7 @@ async fn main() {
         {
             let mut sigint = signal::unix::signal(signal::unix::SignalKind::interrupt()).unwrap();
             let mut sigterm = signal::unix::signal(signal::unix::SignalKind::terminate()).unwrap();
-            
+
             tokio::select! {
                 _ = sigint.recv() => {
                     info!("Received SIGINT, shutting down gracefully...");
@@ -123,7 +123,10 @@ async fn main() {
         }
     });
 
-    info!("Server started successfully on {}. Press Ctrl+C to stop.", addr);
+    info!(
+        "Server started successfully on {}. Press Ctrl+C to stop.",
+        addr
+    );
     server.await;
     info!("Server shutdown complete.");
 }

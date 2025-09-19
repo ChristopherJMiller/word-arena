@@ -6,12 +6,10 @@ use game_server::matchmaking::MatchmakingQueue;
 use game_server::websocket::connection::{ConnectionId, ConnectionManager};
 use game_types::{Player, User};
 use std::sync::Arc;
-use uuid::Uuid;
-
 /// Creates a test user with given name
 pub fn create_test_user(name: &str) -> User {
     User {
-        id: Uuid::new_v4(),
+        id: format!("test-user-{}", name.to_lowercase()),
         display_name: name.to_string(),
         email: format!("{}@test.com", name.to_lowercase()),
         total_points: 0,
@@ -24,7 +22,7 @@ pub fn create_test_user(name: &str) -> User {
 /// Creates a test player from a user
 pub fn user_to_player(user: &User) -> Player {
     Player {
-        user_id: user.id,
+        user_id: user.id.clone(),
         display_name: user.display_name.clone(),
         points: 0,
         guess_history: Vec::new(),
@@ -43,13 +41,16 @@ pub struct TestGameServerSetup {
 impl TestGameServerSetup {
     pub fn new() -> Self {
         let connection_manager = Arc::new(ConnectionManager::new());
-        
+
         // Use test words for predictable testing
         let word_validator = WordValidator::new_with_test_words();
-        
+
         Self {
             connection_manager: connection_manager.clone(),
-            game_manager: Arc::new(GameManager::new_with_validator(connection_manager, word_validator)),
+            game_manager: Arc::new(GameManager::new_with_validator(
+                connection_manager,
+                word_validator,
+            )),
             matchmaking_queue: Arc::new(MatchmakingQueue::new()),
             auth_service: Arc::new(AuthService::new_dev_mode()),
         }

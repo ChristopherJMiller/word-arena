@@ -185,13 +185,15 @@ impl ConnectionManager {
         // If there's an existing connection, disconnect it
         if let Some(old_conn_id) = old_connection_id {
             // Send disconnection message to old connection
-            let _ = self.send_to_connection(
-                old_conn_id,
-                ServerMessage::SessionDisconnected {
-                    reason: "Your session has been taken over by another login.".to_string(),
-                },
-            ).await;
-            
+            let _ = self
+                .send_to_connection(
+                    old_conn_id,
+                    ServerMessage::SessionDisconnected {
+                        reason: "Your session has been taken over by another login.".to_string(),
+                    },
+                )
+                .await;
+
             // Remove the old connection
             self.remove_connection(old_conn_id).await;
         }
@@ -276,7 +278,8 @@ impl ConnectionManager {
                 if conn_game_id == game_id {
                     if let Some(ref user) = connection.user {
                         // Create personalized state for this player
-                        let personalized_state = game_state.personalized_for_player(user.id);
+                        let personalized_state =
+                            game_state.personalized_for_player(user.id.clone());
                         let message = ServerMessage::GameStateUpdate {
                             state: personalized_state,
                         };

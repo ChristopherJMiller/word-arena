@@ -4,7 +4,7 @@ import { getWebSocketService } from "../services/websocketService";
 import { ServerMessage } from "../types/generated";
 
 export function useWebSocket() {
-  const { isAuthenticated, getAccessToken, handleSessionConflict } = useAuth();
+  const { hasMsalAuth, getAccessToken, handleSessionConflict } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [isWSAuthenticated, setIsWSAuthenticated] = useState(false);
   const wsService = useRef(getWebSocketService());
@@ -53,8 +53,8 @@ export function useWebSocket() {
           setIsConnected(true);
         }
 
-        // Authenticate if user is logged in but WS is not authenticated
-        if (isAuthenticated && !isWSAuthenticated) {
+        // Authenticate if user has MSAL token but WS is not authenticated
+        if (hasMsalAuth && !isWSAuthenticated) {
           const token = await getAccessToken();
           if (token) {
             const authResult = await wsService.current.authenticate(token, false);
@@ -80,18 +80,18 @@ export function useWebSocket() {
       }
     };
 
-    // Auto-connect when user is authenticated
-    if (isAuthenticated) {
+    // Auto-connect when user has MSAL auth
+    if (hasMsalAuth) {
       connectAndAuthenticate();
     }
 
     // Disconnect when user logs out
-    if (!isAuthenticated && wsService.current.isConnected) {
+    if (!hasMsalAuth && wsService.current.isConnected) {
       wsService.current.disconnect();
       setIsConnected(false);
       setIsWSAuthenticated(false);
     }
-  }, [isAuthenticated, getAccessToken, isWSAuthenticated]);
+  }, [hasMsalAuth, getAccessToken, isWSAuthenticated]);
 
   const addMessageHandler = (handler: (message: ServerMessage) => void) => {
     wsService.current.addMessageHandler(handler);

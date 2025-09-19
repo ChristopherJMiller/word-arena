@@ -39,7 +39,7 @@ impl GameCleanup {
             let should_remove = self.should_cleanup_game(game);
 
             if should_remove {
-                games_to_remove.push(*game_id);
+                games_to_remove.push(game_id.clone());
             }
         }
 
@@ -120,20 +120,24 @@ impl GameCleanup {
 mod tests {
     use super::*;
     use crate::{Game, WordValidator};
-    use game_types::{GameStatus, Player};
+    use game_types::{GameStatus, Player, PlayerId};
     use std::time::SystemTime;
-    use uuid::Uuid;
 
     fn create_test_game() -> Game {
         let player = Player {
-            user_id: Uuid::new_v4(),
+            user_id: "test-user-id".to_string(),
             display_name: "Test".to_string(),
             points: 0,
             guess_history: Vec::new(),
             is_connected: true,
         };
 
-        Game::new(Uuid::new_v4(), vec![player], "test".to_string(), 25)
+        Game::new(
+            "test-game-id".to_string(),
+            vec![player],
+            "test".to_string(),
+            25,
+        )
     }
 
     #[test]

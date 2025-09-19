@@ -146,7 +146,7 @@ impl ScoringEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
+    use game_types::PlayerId;
 
     #[test]
     fn test_evaluate_guess_correct_word() {
@@ -342,7 +342,7 @@ mod tests {
         // Create a previous guess that revealed some letters
         let previous_guess = GuessResult {
             word: "world".to_string(),
-            player_id: uuid::Uuid::new_v4(),
+            player_id: "test-player-id".to_string(),
             letters: vec![
                 LetterResult {
                     letter: "w".to_string(),
@@ -449,7 +449,7 @@ mod tests {
         // Create a previous guess that revealed the 'h' as blue and 'o' as orange
         let previous_guess = GuessResult {
             word: "hoard".to_string(),
-            player_id: uuid::Uuid::new_v4(),
+            player_id: "test-player-id-2".to_string(),
             letters: vec![
                 LetterResult {
                     letter: "h".to_string(),

@@ -41,7 +41,9 @@ impl MessageHandler {
 
         match message {
             ClientMessage::Authenticate { token } => self.handle_authenticate(token).await,
-            ClientMessage::ForceAuthenticate { token } => self.handle_force_authenticate(token).await,
+            ClientMessage::ForceAuthenticate { token } => {
+                self.handle_force_authenticate(token).await
+            }
             ClientMessage::JoinQueue => self.handle_join_queue().await,
             ClientMessage::LeaveQueue => self.handle_leave_queue().await,
             ClientMessage::VoteStartGame => self.handle_vote_start_game().await,
@@ -95,13 +97,17 @@ impl MessageHandler {
         match self.auth_service.validate_token(&token).await {
             Ok(user) => {
                 // Check if user already has an active session
-                if self.connection_manager.check_existing_session(&user.id.to_string()).await {
+                if self
+                    .connection_manager
+                    .check_existing_session(&user.id.to_string())
+                    .await
+                {
                     // Send session conflict message
                     return self.send_message(ServerMessage::SessionConflict {
                         existing_connection: "You already have an active session in another browser.".to_string(),
                     }).await;
                 }
-                
+
                 // Set user in connection
                 self.connection_manager
                     .set_connection_user(self.connection_id, Some(user.clone()))
@@ -128,9 +134,11 @@ impl MessageHandler {
         match self.auth_service.validate_token(&token).await {
             Ok(user) => {
                 // Force disconnect existing session and authenticate this one
-                match self.connection_manager
+                match self
+                    .connection_manager
                     .force_authenticate_connection(self.connection_id, user.id.to_string())
-                    .await {
+                    .await
+                {
                     Ok(old_conn) => {
                         if old_conn.is_some() {
                             info!("Disconnected existing session for user {}", user.id);
@@ -354,7 +362,7 @@ impl MessageHandler {
 
                 // Send personalized game state to the rejoining player
                 if let Some(ref user) = connection.user {
-                    let personalized_state = current_state.personalized_for_player(user.id);
+                    let personalized_state = current_state.personalized_for_player(user.id.clone());
                     self.send_message(ServerMessage::GameStateUpdate {
                         state: personalized_state,
                     })
@@ -367,7 +375,9 @@ impl MessageHandler {
                         .send_to_game_except(
                             &game_id,
                             self.connection_id,
-                            ServerMessage::PlayerReconnected { player_id: user.id },
+                            ServerMessage::PlayerReconnected {
+                                player_id: user.id.clone(),
+                            },
                         )
                         .await;
                 }
@@ -539,7 +549,7 @@ impl MessageHandler {
                 if let Some(connection) = self.connection_manager.get_connection(player_id).await {
                     if let Some(ref user) = connection.user {
                         players_info.push(game_types::Player {
-                            user_id: user.id,
+                            user_id: user.id.clone(),
                             display_name: user.display_name.clone(),
                             points: 0,
                             guess_history: Vec::new(),
@@ -587,7 +597,7 @@ impl MessageHandler {
                             {
                                 if let Some(ref user) = connection.user {
                                     let personalized_state =
-                                        game_state.personalized_for_player(user.id);
+                                        game_state.personalized_for_player(user.id.clone());
                                     if let Err(e) = self
                                         .connection_manager
                                         .send_to_connection(

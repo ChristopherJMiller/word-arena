@@ -7,7 +7,8 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::websocket::connection::{ConnectionId, ConnectionManager};
-use game_core::{Game, PlayerId, WordValidator};
+use game_core::{Game, WordValidator};
+use game_types::PlayerId;
 use game_types::{
     GamePhase, GameState, GuessResult, PersonalGuess, Player, RoundCompletion, RoundResult,
     SafeGameState, User,
@@ -55,7 +56,7 @@ impl ActiveGame {
 
         for (connection_id, user) in authenticated_players.iter() {
             let player = Player {
-                user_id: user.id,
+                user_id: user.id.clone(),
                 display_name: user.display_name.clone(),
                 points: 0,
                 guess_history: Vec::new(),
@@ -63,8 +64,8 @@ impl ActiveGame {
             };
 
             game_players.push(player);
-            connection_to_player.insert(*connection_id, user.id);
-            player_to_connection.insert(user.id, *connection_id);
+            connection_to_player.insert(*connection_id, user.id.clone());
+            player_to_connection.insert(user.id.clone(), *connection_id);
         }
 
         // Get a random word from the shared word validator
@@ -73,7 +74,7 @@ impl ActiveGame {
             .expect("Failed to get random word");
 
         let mut game = Game::new(
-            Uuid::parse_str(&id).unwrap_or_else(|_| Uuid::new_v4()),
+            id.clone(),
             game_players,
             target_word,
             25, // Points to win from config
@@ -181,7 +182,7 @@ impl GameManager {
         // Check for duplicate users - prevent same user from joining twice
         let mut user_ids = std::collections::HashSet::new();
         for (_, user) in &authenticated_players {
-            if !user_ids.insert(user.id) {
+            if !user_ids.insert(user.id.clone()) {
                 return Err(format!("User {} is already in the game", user.display_name));
             }
         }
@@ -247,7 +248,10 @@ impl GameManager {
                     active_game.game.state.current_winner,
                     player_id
                 );
-                match active_game.game.process_individual_guess(player_id, word) {
+                match active_game
+                    .game
+                    .process_individual_guess(player_id.clone(), word)
+                {
                     Ok(Some(round_result)) => {
                         match round_result {
                             RoundResult::Continuing(guess_result) => {
@@ -306,7 +310,7 @@ impl GameManager {
             }
             GamePhase::Guessing => {
                 // Collaborative guessing phase
-                if let Err(e) = active_game.game.add_guess(player_id, word.clone()) {
+                if let Err(e) = active_game.game.add_guess(&player_id, word.clone()) {
                     return Err(format!("Failed to add guess: {:?}", e));
                 }
 
@@ -317,7 +321,7 @@ impl GameManager {
                     .players
                     .iter()
                     .filter(|p| p.is_connected)
-                    .map(|p| p.user_id)
+                    .map(|p| p.user_id.clone())
                     .collect();
 
                 let all_connected_guessed = connected_players
@@ -446,11 +450,11 @@ impl GameManager {
     }
 
     /// Check if a user is a participant in the given game
-    pub async fn is_user_in_game(&self, game_id: &str, user_id: &Uuid) -> bool {
+    pub async fn is_user_in_game(&self, game_id: &str, user_id: &str) -> bool {
         let games = self.active_games.read().await;
         if let Some(active_game) = games.get(game_id) {
             let full_state = active_game.convert_to_api_state();
-            full_state.players.iter().any(|p| &p.user_id == user_id)
+            full_state.players.iter().any(|p| p.user_id == user_id)
         } else {
             false
         }
@@ -501,10 +505,10 @@ impl GameManager {
         // Update connection mappings
         active_game
             .connection_to_player
-            .insert(connection_id, disconnected_player.user_id);
+            .insert(connection_id, disconnected_player.user_id.clone());
         active_game
             .player_to_connection
-            .insert(disconnected_player.user_id, connection_id);
+            .insert(disconnected_player.user_id.clone(), connection_id);
 
         // Mark player as connected in game state
         for player in &mut active_game.game.state.players {

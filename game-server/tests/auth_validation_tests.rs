@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use uuid::Uuid;
 
 use game_server::{
     auth::AuthService,
@@ -20,7 +19,7 @@ async fn setup_authenticated_connections(
         let _receiver = connection_manager.create_connection(connection_id).await;
 
         let user = User {
-            id: Uuid::parse_str(user_id).unwrap_or_else(|_| Uuid::new_v4()),
+            id: user_id.to_string(),
             email: email.to_string(),
             display_name: display_name.to_string(),
             total_points: 0,
@@ -82,20 +81,14 @@ async fn test_create_game_with_authenticated_users() {
         .iter()
         .find(|p| p.display_name == "Alice")
         .unwrap();
-    assert_eq!(
-        alice.user_id.to_string(),
-        "550e8400-e29b-41d4-a716-446655440001"
-    );
+    assert_eq!(alice.user_id, "550e8400-e29b-41d4-a716-446655440001");
 
     let bob = state
         .players
         .iter()
         .find(|p| p.display_name == "Bob")
         .unwrap();
-    assert_eq!(
-        bob.user_id.to_string(),
-        "550e8400-e29b-41d4-a716-446655440002"
-    );
+    assert_eq!(bob.user_id, "550e8400-e29b-41d4-a716-446655440002");
 
     // Verify game is in correct initial state
     assert_eq!(state.current_phase, GamePhase::Guessing);
@@ -162,7 +155,7 @@ async fn test_create_game_with_duplicate_users() {
     // but we're testing the validation)
     let user_id = "550e8400-e29b-41d4-a716-446655440001";
     let user = User {
-        id: Uuid::parse_str(user_id).unwrap(),
+        id: user_id.to_string(),
         email: "alice@example.com".to_string(),
         display_name: "Alice".to_string(),
         total_points: 0,
@@ -278,10 +271,7 @@ async fn test_submit_guess_validates_user_identity() {
             .iter()
             .find(|p| p.display_name == "Alice")
             .unwrap();
-        assert_eq!(
-            alice.user_id.to_string(),
-            "550e8400-e29b-41d4-a716-446655440001"
-        );
+        assert_eq!(alice.user_id, "550e8400-e29b-41d4-a716-446655440001");
     }
 
     // Second player submits a guess - should also work
@@ -315,9 +305,9 @@ async fn test_is_user_in_game_validates_correctly() {
     .await;
 
     let connection_ids: Vec<ConnectionId> = connections.iter().map(|(id, _)| *id).collect();
-    let alice_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
-    let bob_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap();
-    let stranger_id = Uuid::new_v4();
+    let alice_id = "550e8400-e29b-41d4-a716-446655440001".to_string();
+    let bob_id = "550e8400-e29b-41d4-a716-446655440002".to_string();
+    let stranger_id = "test-stranger-id".to_string();
 
     // Create game
     let game_id = game_manager.create_game(connection_ids).await.unwrap();
@@ -330,7 +320,7 @@ async fn test_is_user_in_game_validates_correctly() {
     assert!(!game_manager.is_user_in_game(&game_id, &stranger_id).await);
 
     // Non-existent game should return false
-    let fake_game_id = Uuid::new_v4().to_string();
+    let fake_game_id = "fake-game-id".to_string();
     assert!(!game_manager.is_user_in_game(&fake_game_id, &alice_id).await);
 }
 
@@ -381,8 +371,8 @@ async fn test_security_user_cannot_access_other_game() {
     let game_id1 = game_manager.create_game(connection_ids1).await.unwrap();
     let game_id2 = game_manager.create_game(connection_ids2).await.unwrap();
 
-    let alice_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
-    let charlie_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440003").unwrap();
+    let alice_id = "550e8400-e29b-41d4-a716-446655440001".to_string();
+    let charlie_id = "550e8400-e29b-41d4-a716-446655440003".to_string();
 
     // Alice should be in game 1 but not game 2
     assert!(game_manager.is_user_in_game(&game_id1, &alice_id).await);
@@ -411,7 +401,7 @@ async fn test_auth_service_dev_mode_creates_proper_users() {
 
     assert!(user_result.is_ok());
     let user = user_result.unwrap();
-    assert_eq!(user.id.to_string(), "550e8400-e29b-41d4-a716-446655440001");
+    assert_eq!(user.id, "550e8400-e29b-41d4-a716-446655440001");
     assert_eq!(user.email, "alice@example.com");
     assert_eq!(user.display_name, "Alice");
 
@@ -420,10 +410,7 @@ async fn test_auth_service_dev_mode_creates_proper_users() {
     let json_user_result = auth_service.validate_token(json_token).await;
     assert!(json_user_result.is_ok());
     let json_user = json_user_result.unwrap();
-    assert_eq!(
-        json_user.id.to_string(),
-        "550e8400-e29b-41d4-a716-446655440002"
-    );
+    assert_eq!(json_user.id, "550e8400-e29b-41d4-a716-446655440002");
     assert_eq!(json_user.email, "bob@example.com");
     assert_eq!(json_user.display_name, "Bob");
 }

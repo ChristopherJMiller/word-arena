@@ -1,11 +1,11 @@
+use crate::PlayerId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct User {
-    pub id: Uuid,
+    pub id: PlayerId,
     pub email: String,
     pub display_name: String,
     pub total_points: i32,
@@ -17,7 +17,7 @@ pub struct User {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Player {
-    pub user_id: Uuid,
+    pub user_id: PlayerId,
     pub display_name: String,
     pub points: i32,
     pub guess_history: Vec<PersonalGuess>,

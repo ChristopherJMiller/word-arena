@@ -1,15 +1,11 @@
 use crate::{GameEvent, GameEventBus, ScoringEngine, WordValidator};
 use anyhow::{Result, anyhow};
 use game_types::{
-    GamePhase, GameState, GameStatus, GuessResult, PersonalGuess, Player, RoundCompletion,
-    RoundResult,
+    GameId, GamePhase, GameState, GameStatus, GuessResult, PersonalGuess, Player, PlayerId,
+    RoundCompletion, RoundResult,
 };
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
-use uuid::Uuid;
-
-pub type GameId = Uuid;
-pub type PlayerId = Uuid;
 
 #[derive(Debug)]
 pub struct Game {
@@ -52,9 +48,9 @@ impl Game {
         }
     }
 
-    pub fn add_guess(&mut self, player_id: PlayerId, word: String) -> Result<()> {
+    pub fn add_guess(&mut self, player_id: &PlayerId, word: String) -> Result<()> {
         // Validate player is in the game
-        if !self.state.players.iter().any(|p| p.user_id == player_id) {
+        if !self.state.players.iter().any(|p| &p.user_id == player_id) {
             return Err(anyhow!("Player not in game"));
         }
 
@@ -69,7 +65,7 @@ impl Game {
         }
 
         // Store the guess for this round
-        self.current_guesses.insert(player_id, word);
+        self.current_guesses.insert(player_id.clone(), word);
         self.last_activity = SystemTime::now();
 
         Ok(())
@@ -92,7 +88,7 @@ impl Game {
 
         if let Some(index) = winner_index {
             let (winning_word, winning_player_str) = &guesses[index];
-            let winning_player_id = Uuid::parse_str(winning_player_str)?;
+            let winning_player_id = winning_player_str.clone();
 
             // Evaluate the winning guess
             let (letter_results, points_earned) = ScoringEngine::evaluate_guess(
@@ -104,7 +100,7 @@ impl Game {
             // Create the guess result
             let guess_result = GuessResult {
                 word: winning_word.clone(),
-                player_id: winning_player_id,
+                player_id: winning_player_id.clone(),
                 letters: letter_results,
                 points_earned,
                 timestamp: chrono::Utc::now().to_rfc3339(),
@@ -225,7 +221,7 @@ impl Game {
         }
 
         // Check if this player is the current winner
-        if Some(player_id) != self.state.current_winner {
+        if Some(player_id.clone()) != self.state.current_winner {
             return Err(anyhow!("Only the round winner can make individual guesses"));
         }
 
@@ -252,7 +248,7 @@ impl Game {
         // Create the guess result
         let guess_result = GuessResult {
             word: word.clone(),
-            player_id,
+            player_id: player_id.clone(),
             letters: letter_results,
             points_earned,
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -338,14 +334,14 @@ impl GameManager {
         }
     }
 
-    pub fn add_to_queue(&mut self, player_id: PlayerId) {
-        if !self.game_queue.contains(&player_id) {
-            self.game_queue.push_back(player_id);
+    pub fn add_to_queue(&mut self, player_id: &PlayerId) {
+        if !self.game_queue.contains(player_id) {
+            self.game_queue.push_back(player_id.clone());
         }
     }
 
-    pub fn remove_from_queue(&mut self, player_id: PlayerId) {
-        self.game_queue.retain(|&id| id != player_id);
+    pub fn remove_from_queue(&mut self, player_id: &PlayerId) {
+        self.game_queue.retain(|id| id != player_id);
     }
 
     pub fn create_game(&mut self, players: Vec<Player>) -> Result<GameId> {
@@ -355,10 +351,10 @@ impl GameManager {
 
         // Get random word (defaulting to 6 letters)
         let target_word = self.word_validator.get_random_word(6)?;
-        let game_id = Uuid::new_v4();
+        let game_id = uuid::Uuid::new_v4().to_string();
 
         let game = Game::new(
-            game_id,
+            game_id.clone(),
             players.clone(),
             target_word.clone(),
             self.default_point_threshold,
@@ -366,27 +362,28 @@ impl GameManager {
 
         // Update player mappings
         for player in &players {
-            self.player_to_game.insert(player.user_id, game_id);
-            self.remove_from_queue(player.user_id);
+            self.player_to_game
+                .insert(player.user_id.clone(), game_id.clone());
+            self.remove_from_queue(&player.user_id);
         }
 
         // Emit event
         let event = GameEvent::GameCreated {
-            game_id,
+            game_id: game_id.clone(),
             players,
             word: target_word,
             point_threshold: self.default_point_threshold,
         };
         self.event_bus.publish(event);
 
-        self.active_games.insert(game_id, game);
+        self.active_games.insert(game_id.clone(), game);
         Ok(game_id)
     }
 
     pub fn handle_guess(
         &mut self,
-        game_id: GameId,
-        player_id: PlayerId,
+        game_id: &GameId,
+        player_id: &PlayerId,
         word: String,
     ) -> Result<Option<GameEvent>> {
         // Validate word
@@ -396,15 +393,15 @@ impl GameManager {
 
         let game = self
             .active_games
-            .get_mut(&game_id)
+            .get_mut(game_id)
             .ok_or_else(|| anyhow!("Game not found"))?;
 
         game.add_guess(player_id, word.clone())?;
 
         // Emit guess event
         let event = GameEvent::GuessSubmitted {
-            game_id,
-            player_id,
+            game_id: game_id.clone(),
+            player_id: player_id.clone(),
             word,
         };
         self.event_bus.publish(event.clone());
@@ -418,7 +415,7 @@ impl GameManager {
             .active_games
             .iter()
             .filter(|(_, game)| game.is_expired(timeout_duration))
-            .map(|(id, _)| *id)
+            .map(|(id, _)| id.clone())
             .collect();
 
         for game_id in expired_games {
@@ -438,8 +435,8 @@ impl GameManager {
         }
     }
 
-    pub fn get_queue_position(&self, player_id: PlayerId) -> Option<usize> {
-        self.game_queue.iter().position(|&id| id == player_id)
+    pub fn get_queue_position(&self, player_id: &PlayerId) -> Option<usize> {
+        self.game_queue.iter().position(|id| id == player_id)
     }
 }
 
@@ -455,7 +452,7 @@ mod tests {
 
     fn create_test_player(name: &str) -> Player {
         Player {
-            user_id: Uuid::new_v4(),
+            user_id: format!("test-player-{}", name.to_lowercase()),
             display_name: name.to_string(),
             points: 0,
             guess_history: Vec::new(),
@@ -482,13 +479,13 @@ mod tests {
         let validator = create_test_validator();
         let mut manager = GameManager::new(validator);
 
-        let player_id = Uuid::new_v4();
+        let player_id = "test-player-id".to_string();
 
-        manager.add_to_queue(player_id);
-        assert_eq!(manager.get_queue_position(player_id), Some(0));
+        manager.add_to_queue(&player_id);
+        assert_eq!(manager.get_queue_position(&player_id), Some(0));
 
-        manager.remove_from_queue(player_id);
-        assert_eq!(manager.get_queue_position(player_id), None);
+        manager.remove_from_queue(&player_id);
+        assert_eq!(manager.get_queue_position(&player_id), None);
     }
 
     #[test]
@@ -536,15 +533,15 @@ mod tests {
         let validator = create_test_validator();
         let mut manager = GameManager::new(validator);
 
-        let player_id = Uuid::new_v4();
+        let player_id = "test-player-duplicate".to_string();
 
         // Add same player multiple times
-        manager.add_to_queue(player_id);
-        manager.add_to_queue(player_id);
-        manager.add_to_queue(player_id);
+        manager.add_to_queue(&player_id);
+        manager.add_to_queue(&player_id);
+        manager.add_to_queue(&player_id);
 
         // Should only appear once
-        assert_eq!(manager.get_queue_position(player_id), Some(0));
+        assert_eq!(manager.get_queue_position(&player_id), Some(0));
         assert_eq!(manager.game_queue.len(), 1);
     }
 
@@ -555,20 +552,20 @@ mod tests {
 
         let players = vec![create_test_player("Alice"), create_test_player("Bob")];
         let game_id = manager.create_game(players.clone()).unwrap();
-        let player_id = players[0].user_id;
+        let player_id = players[0].user_id.clone();
 
         // Test invalid word
-        let result = manager.handle_guess(game_id, player_id, "invalidword".to_string());
+        let result = manager.handle_guess(&game_id, &player_id, "invalidword".to_string());
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid word"));
 
         // Test non-alphabetic word
-        let result = manager.handle_guess(game_id, player_id, "test123".to_string());
+        let result = manager.handle_guess(&game_id, &player_id, "test123".to_string());
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Invalid word"));
 
         // Test empty word
-        let result = manager.handle_guess(game_id, player_id, "".to_string());
+        let result = manager.handle_guess(&game_id, &player_id, "".to_string());
         assert!(result.is_err());
     }
 
@@ -579,14 +576,14 @@ mod tests {
 
         let players = vec![create_test_player("Alice"), create_test_player("Bob")];
         let game_id = manager.create_game(players.clone()).unwrap();
-        let alice_id = players[0].user_id;
-        let bob_id = players[1].user_id;
+        let alice_id = players[0].user_id.clone();
+        let bob_id = players[1].user_id.clone();
 
         let game = manager.active_games.get_mut(&game_id).unwrap();
 
         // Test player not in game
-        let fake_player = Uuid::new_v4();
-        let result = game.add_guess(fake_player, "hello".to_string());
+        let fake_player = "fake-player".to_string();
+        let result = game.add_guess(&fake_player, "hello".to_string());
         assert!(result.is_err());
         assert!(
             result
@@ -596,12 +593,12 @@ mod tests {
         );
 
         // Test duplicate word guessing
-        game.add_guess(alice_id, "hello".to_string()).unwrap();
+        game.add_guess(&alice_id, "hello".to_string()).unwrap();
         let guess_result = game.process_round().unwrap();
         assert!(guess_result.is_some());
 
         // Try to guess the same word again
-        let result = game.add_guess(bob_id, "hello".to_string());
+        let result = game.add_guess(&bob_id, "hello".to_string());
         assert!(result.is_err());
         assert!(
             result
@@ -642,10 +639,10 @@ mod tests {
 
         let game = manager.active_games.get_mut(&game_id).unwrap();
         let target_word = game.target_word.clone();
-        let alice_id = players[0].user_id;
+        let alice_id = players[0].user_id.clone();
 
         // Test word completion - should return WordCompleted result when target word is guessed
-        game.add_guess(alice_id, target_word.clone()).unwrap();
+        game.add_guess(&alice_id, target_word.clone()).unwrap();
         let result = game.process_round();
 
         // Should return Ok with WordCompleted variant
@@ -672,7 +669,7 @@ mod tests {
 
         // Test point threshold completion
         let mut game2 = Game::new(
-            Uuid::new_v4(),
+            "test-game-id-2".to_string(),
             players.clone(),
             "tests".to_string(),
             10, // Low threshold
@@ -682,7 +679,7 @@ mod tests {
         players[0].points = 15;
         game2.state.players = players;
 
-        game2.add_guess(alice_id, "tests".to_string()).unwrap();
+        game2.add_guess(&alice_id, "tests".to_string()).unwrap();
         let result = game2.process_round().unwrap();
         assert!(result.is_some());
         assert_eq!(game2.state.status, GameStatus::Completed);
@@ -713,7 +710,7 @@ mod tests {
     fn test_empty_round_processing() {
         let validator = create_test_validator();
         let players = vec![create_test_player("Alice"), create_test_player("Bob")];
-        let mut game = Game::new(Uuid::new_v4(), players, "hello".to_string(), 25);
+        let mut game = Game::new("test-game-id".to_string(), players, "hello".to_string(), 25);
 
         // Process round with no guesses
         let result = game.process_round().unwrap();
@@ -729,7 +726,7 @@ mod tests {
         players[0].points = 30; // Above threshold
         players[1].points = 20; // Below threshold
 
-        let game = Game::new(Uuid::new_v4(), players, "hello".to_string(), 25);
+        let game = Game::new("test-game-id".to_string(), players, "hello".to_string(), 25);
 
         let winner = game.get_winner();
         assert!(winner.is_some());
@@ -740,7 +737,12 @@ mod tests {
         players2[0].points = 20; // Below threshold
         players2[1].points = 15; // Below threshold
 
-        let game2 = Game::new(Uuid::new_v4(), players2, "hello".to_string(), 25);
+        let game2 = Game::new(
+            "test-game-id-2".to_string(),
+            players2,
+            "hello".to_string(),
+            25,
+        );
         assert!(game2.get_winner().is_none());
     }
 
@@ -749,11 +751,11 @@ mod tests {
         let validator = create_test_validator();
         let mut manager = GameManager::new(validator);
 
-        let fake_game_id = Uuid::new_v4();
-        let fake_player_id = Uuid::new_v4();
+        let fake_game_id = "fake-game-id".to_string();
+        let fake_player_id = "fake-player-id".to_string();
 
         // Try to handle guess for non-existent game
-        let result = manager.handle_guess(fake_game_id, fake_player_id, "hello".to_string());
+        let result = manager.handle_guess(&fake_game_id, &fake_player_id, "hello".to_string());
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Game not found"));
     }
@@ -764,12 +766,12 @@ mod tests {
         let mut manager = GameManager::new(validator);
 
         let players = vec![create_test_player("Alice"), create_test_player("Bob")];
-        let alice_id = players[0].user_id;
-        let bob_id = players[1].user_id;
+        let alice_id = players[0].user_id.clone();
+        let bob_id = players[1].user_id.clone();
 
         // Add players to queue
-        manager.add_to_queue(alice_id);
-        manager.add_to_queue(bob_id);
+        manager.add_to_queue(&alice_id);
+        manager.add_to_queue(&bob_id);
         assert_eq!(manager.game_queue.len(), 2);
 
         // Create game - should remove from queue and add to player mapping
@@ -785,7 +787,7 @@ mod tests {
 
         // Force expiration by removing game and simulate cleanup
         let game = manager.active_games.remove(&game_id).unwrap();
-        manager.active_games.insert(game_id, game);
+        manager.active_games.insert(game_id.clone(), game);
 
         // Manually trigger cleanup logic for testing
         if let Some(game) = manager.active_games.remove(&game_id) {

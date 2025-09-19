@@ -1,68 +1,67 @@
-use game_types::{GamePhase, GuessResult, Player};
-use uuid::Uuid;
+use game_types::{GameId, GamePhase, GuessResult, Player, PlayerId};
 
 #[derive(Debug, Clone)]
 pub enum GameEvent {
     GameCreated {
-        game_id: Uuid,
+        game_id: GameId,
         players: Vec<Player>,
         word: String,
         point_threshold: i32,
     },
     CountdownStarted {
-        game_id: Uuid,
+        game_id: GameId,
         duration_seconds: u32,
     },
     GuessSubmitted {
-        game_id: Uuid,
-        player_id: Uuid,
+        game_id: GameId,
+        player_id: PlayerId,
         word: String,
     },
     RoundCompleted {
-        game_id: Uuid,
+        game_id: GameId,
         winning_guess: GuessResult,
         next_phase: GamePhase,
     },
     WordSolved {
-        game_id: Uuid,
+        game_id: GameId,
         solution: String,
-        solver: Uuid,
+        solver: PlayerId,
     },
     GameCompleted {
-        game_id: Uuid,
+        game_id: GameId,
         winner: Player,
         final_scores: Vec<Player>,
     },
     PlayerDisconnected {
-        game_id: Uuid,
-        player_id: Uuid,
+        game_id: GameId,
+        player_id: PlayerId,
     },
     PlayerReconnected {
-        game_id: Uuid,
-        player_id: Uuid,
+        game_id: GameId,
+        player_id: PlayerId,
     },
     GameAbandoned {
-        game_id: Uuid,
+        game_id: GameId,
         reason: String,
     },
     GameTimedOut {
-        game_id: Uuid,
+        game_id: GameId,
     },
 }
 
 impl GameEvent {
-    pub fn game_id(&self) -> Uuid {
+    pub fn game_id(&self) -> GameId {
         match self {
-            GameEvent::GameCreated { game_id, .. } => *game_id,
-            GameEvent::CountdownStarted { game_id, .. } => *game_id,
-            GameEvent::GuessSubmitted { game_id, .. } => *game_id,
-            GameEvent::RoundCompleted { game_id, .. } => *game_id,
-            GameEvent::WordSolved { game_id, .. } => *game_id,
-            GameEvent::GameCompleted { game_id, .. } => *game_id,
-            GameEvent::PlayerDisconnected { game_id, .. } => *game_id,
-            GameEvent::PlayerReconnected { game_id, .. } => *game_id,
-            GameEvent::GameAbandoned { game_id, .. } => *game_id,
-            GameEvent::GameTimedOut { game_id, .. } => *game_id,
+            GameEvent::GameCreated { game_id, .. } => game_id.clone(),
+            GameEvent::CountdownStarted { game_id, .. } => game_id.clone(),
+            GameEvent::GuessSubmitted { game_id, .. } => game_id.clone(),
+            GameEvent::RoundCompleted { game_id, .. } => game_id.clone(),
+            GameEvent::WordSolved { game_id, .. } => game_id.clone(),
+            GameEvent::GameCompleted { game_id, .. } => game_id.clone(),
+            GameEvent::PlayerDisconnected { game_id, .. } => game_id.clone(),
+            GameEvent::PlayerReconnected { game_id, .. } => game_id.clone(),
+            GameEvent::GameAbandoned { game_id, .. } => game_id.clone(),
+            GameEvent::GameTimedOut { game_id, .. } => game_id.clone(),
         }
     }
 }
@@ -126,7 +125,7 @@ mod tests {
         let mut bus = GameEventBus::new();
         let mut handler = TestHandler::new();
 
-        let game_id = Uuid::new_v4();
+        let game_id = "test-game-id".to_string();
         let event = GameEvent::GameCreated {
             game_id,
             players: vec![],

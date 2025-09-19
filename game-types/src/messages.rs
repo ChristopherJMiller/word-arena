@@ -1,6 +1,6 @@
+use crate::PlayerId;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use uuid::Uuid;
 
 use crate::{GamePhase, GameState, GuessResult, PersonalGuess, Player};
 
@@ -61,10 +61,10 @@ pub enum ServerMessage {
     },
     GameLeft,
     PlayerDisconnected {
-        player_id: Uuid,
+        player_id: PlayerId,
     },
     PlayerReconnected {
-        player_id: Uuid,
+        player_id: PlayerId,
     },
     SessionDisconnected {
         reason: String,
@@ -78,6 +78,6 @@ pub enum ServerMessage {
 #[ts(export)]
 pub struct ConnectionInfo {
     pub session_token: String,
-    pub user_id: Uuid,
+    pub user_id: PlayerId,
     pub reconnection_token: Option<String>,
 }

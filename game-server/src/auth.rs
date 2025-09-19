@@ -13,14 +13,14 @@ use game_types::User;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MicrosoftJwtClaims {
-    pub aud: String,                // Audience
-    pub iss: String,                // Issuer
-    pub iat: u64,                   // Issued at
-    pub exp: u64,                   // Expiry
-    pub sub: Option<String>,        // Subject (user ID) - optional
-    pub oid: Option<String>,        // Object ID (Azure AD user ID) - optional
-    pub email: Option<String>,      // User email - optional in some scenarios
-    pub name: Option<String>,       // Display name - optional
+    pub aud: String,                        // Audience
+    pub iss: String,                        // Issuer
+    pub iat: u64,                           // Issued at
+    pub exp: u64,                           // Expiry
+    pub sub: Option<String>,                // Subject (user ID) - optional
+    pub oid: Option<String>,                // Object ID (Azure AD user ID) - optional
+    pub email: Option<String>,              // User email - optional in some scenarios
+    pub name: Option<String>,               // Display name - optional
     pub preferred_username: Option<String>, // Username - optional
 }
 
@@ -94,7 +94,7 @@ impl AuthService {
         let mut validation = Validation::new(Algorithm::RS256);
         // Use our app's client ID as the audience (not Microsoft Graph)
         validation.set_audience(&[&self.client_id]);
-        
+
         // Handle issuer validation based on tenant type
         let is_common_tenant = self.tenant_id == "common";
         if is_common_tenant {
@@ -113,11 +113,11 @@ impl AuthService {
             validation.set_issuer(&[&v1_issuer, &v2_issuer]);
             tracing::debug!("Accepted issuers: {} and {}", v1_issuer, v2_issuer);
         }
-        
+
         tracing::debug!("Validating token with audience: {}", self.client_id);
 
-        let token_data = decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation)
-            .map_err(|e| {
+        let token_data =
+            decode::<MicrosoftJwtClaims>(token, &decoding_key, &validation).map_err(|e| {
                 tracing::warn!("JWT token validation failed: {:?}", e);
                 tracing::warn!("Token validation details:");
                 tracing::warn!("  - Algorithm: RS256 (expected)");
@@ -144,8 +144,8 @@ impl AuthService {
 
         // Manual issuer validation for common tenant
         if is_common_tenant {
-            let valid_issuer = claims.iss.starts_with("https://sts.windows.net/") || 
-                               claims.iss.starts_with("https://login.microsoftonline.com/");
+            let valid_issuer = claims.iss.starts_with("https://sts.windows.net/")
+                || claims.iss.starts_with("https://login.microsoftonline.com/");
             if !valid_issuer {
                 tracing::warn!("Invalid issuer for common tenant: {}", claims.iss);
                 return Err(AuthError::InvalidToken);
@@ -165,31 +165,19 @@ impl AuthService {
         }
 
         // Create user from claims
-        // Use oid (object ID) if available, fallback to sub, then generate new UUID
-        let raw_user_id = claims.oid.or(claims.sub);
-        let user_id = if let Some(id_str) = raw_user_id {
-            // Handle Microsoft's common tenant format: user-id.tenant-id
-            // Extract just the user part before the dot
-            let clean_id = if id_str.contains('.') {
-                let parts: Vec<&str> = id_str.split('.').collect();
-                tracing::debug!("Detected compound user ID: {}, extracting user part: {}", id_str, parts[0]);
-                parts[0]
-            } else {
-                &id_str
-            };
-            
-            uuid::Uuid::parse_str(clean_id).unwrap_or_else(|e| {
-                tracing::warn!("Failed to parse user ID '{}': {}. Generating new UUID.", clean_id, e);
-                uuid::Uuid::new_v4()
-            })
-        } else {
-            tracing::debug!("No oid or sub found in claims, generating new UUID");
-            uuid::Uuid::new_v4()
-        };
+        // Use the full compound ID (oid or sub) for cross-tenant consistency
+        let user_id = claims.oid.or(claims.sub).unwrap_or_else(|| {
+            tracing::debug!("No oid or sub found in claims, generating new ID");
+            uuid::Uuid::new_v4().to_string()
+        });
+
+        tracing::debug!("Using user ID: {}", user_id);
 
         Ok(User {
             id: user_id,
-            email: claims.email.unwrap_or_else(|| "unknown@example.com".to_string()),
+            email: claims
+                .email
+                .unwrap_or_else(|| "unknown@example.com".to_string()),
             display_name: claims.name.unwrap_or_else(|| "Unknown User".to_string()),
             total_points: 0,
             total_wins: 0,
@@ -206,10 +194,18 @@ impl AuthService {
                 // Cache for 1 hour
                 let elapsed = cached_time.elapsed().unwrap_or(Duration::from_secs(3600));
                 if elapsed < Duration::from_secs(3600) {
-                    tracing::debug!("Using cached decoding key for kid '{}' (cached {}s ago)", kid, elapsed.as_secs());
+                    tracing::debug!(
+                        "Using cached decoding key for kid '{}' (cached {}s ago)",
+                        kid,
+                        elapsed.as_secs()
+                    );
                     return Ok(key.clone());
                 } else {
-                    tracing::debug!("Cached key for kid '{}' is expired ({}s old), fetching fresh", kid, elapsed.as_secs());
+                    tracing::debug!(
+                        "Cached key for kid '{}' is expired ({}s old), fetching fresh",
+                        kid,
+                        elapsed.as_secs()
+                    );
                 }
             } else {
                 tracing::debug!("No cached key found for kid '{}', fetching from JWKS", kid);
@@ -221,54 +217,61 @@ impl AuthService {
             "https://login.microsoftonline.com/{}/discovery/v2.0/keys",
             self.tenant_id
         );
-        tracing::debug!("Fetching JWKS from tenant {} at: {}", self.tenant_id, jwks_url);
+        tracing::debug!(
+            "Fetching JWKS from tenant {} at: {}",
+            self.tenant_id,
+            jwks_url
+        );
 
-        let response = self
-            .client
-            .get(&jwks_url)
-            .send()
-            .await
-            .map_err(|e| {
-                tracing::warn!("Failed to fetch JWKS: {:?}", e);
-                AuthError::JwksFetchError
-            })?;
+        let response = self.client.get(&jwks_url).send().await.map_err(|e| {
+            tracing::warn!("Failed to fetch JWKS: {:?}", e);
+            AuthError::JwksFetchError
+        })?;
 
         if !response.status().is_success() {
             tracing::warn!("JWKS fetch returned status: {}", response.status());
             return Err(AuthError::JwksFetchError);
         }
 
-        let jwks: JwksResponse = response
-            .json()
-            .await
-            .map_err(|e| {
-                tracing::warn!("Failed to parse JWKS JSON: {:?}", e);
-                AuthError::JwksFetchError
-            })?;
+        let jwks: JwksResponse = response.json().await.map_err(|e| {
+            tracing::warn!("Failed to parse JWKS JSON: {:?}", e);
+            AuthError::JwksFetchError
+        })?;
 
         tracing::debug!("Successfully fetched JWKS with {} keys", jwks.keys.len());
 
         // Find the key with matching kid
         tracing::debug!("Looking for key with kid: {}", kid);
-        tracing::debug!("Available keys: {:?}", jwks.keys.iter().map(|k| &k.kid).collect::<Vec<_>>());
-        
-        let jwks_key = jwks
-            .keys
-            .iter()
-            .find(|key| key.kid == kid)
-            .ok_or_else(|| {
-                tracing::warn!("Key with kid '{}' not found in JWKS from tenant {}", kid, self.tenant_id);
-                tracing::warn!("This means the token was signed by a different tenant or the key has rotated");
-                AuthError::KeyNotFound
-            })?;
-            
-        tracing::debug!("Found matching key with kid '{}' in JWKS from tenant {}", kid, self.tenant_id);
+        tracing::debug!(
+            "Available keys: {:?}",
+            jwks.keys.iter().map(|k| &k.kid).collect::<Vec<_>>()
+        );
+
+        let jwks_key = jwks.keys.iter().find(|key| key.kid == kid).ok_or_else(|| {
+            tracing::warn!(
+                "Key with kid '{}' not found in JWKS from tenant {}",
+                kid,
+                self.tenant_id
+            );
+            tracing::warn!(
+                "This means the token was signed by a different tenant or the key has rotated"
+            );
+            AuthError::KeyNotFound
+        })?;
+
+        tracing::debug!(
+            "Found matching key with kid '{}' in JWKS from tenant {}",
+            kid,
+            self.tenant_id
+        );
 
         // Convert to DecodingKey
-        tracing::debug!("Converting JWKS key to decoding key. Has n,e: {}, Has x5c: {}", 
-                       jwks_key.n.is_some() && jwks_key.e.is_some(),
-                       jwks_key.x5c.is_some());
-        
+        tracing::debug!(
+            "Converting JWKS key to decoding key. Has n,e: {}, Has x5c: {}",
+            jwks_key.n.is_some() && jwks_key.e.is_some(),
+            jwks_key.x5c.is_some()
+        );
+
         let decoding_key = if let (Some(n), Some(e)) = (&jwks_key.n, &jwks_key.e) {
             tracing::debug!("Using RSA components (n,e) to create decoding key");
             DecodingKey::from_rsa_components(n, e).map_err(|e| {
@@ -293,7 +296,7 @@ impl AuthService {
             tracing::warn!("JWKS key has neither n,e components nor x5c certificate");
             return Err(AuthError::InvalidKey);
         };
-        
+
         tracing::debug!("Successfully created decoding key for kid: {}", kid);
 
         // Cache the key
@@ -305,11 +308,13 @@ impl AuthService {
         Ok(decoding_key)
     }
 
-
     async fn validate_dev_token(&self, token: &str) -> Result<User, AuthError> {
         // In dev mode, we expect a JWT-like token but we parse it without validation
         // We just decode the payload section and extract the claims
-        tracing::debug!("Validating dev token (first 20 chars): {}", &token[..token.len().min(20)]);
+        tracing::debug!(
+            "Validating dev token (first 20 chars): {}",
+            &token[..token.len().min(20)]
+        );
 
         // Check if it looks like a JWT (has 3 parts separated by dots)
         let parts: Vec<&str> = token.split('.').collect();
@@ -343,14 +348,16 @@ impl AuthService {
 
             // Create user from claims (no validation in dev mode)
             // Use oid (object ID) if available, fallback to sub, then generate new UUID
-            let user_id = claims.oid
+            let user_id = claims
+                .oid
                 .or(claims.sub)
-                .and_then(|id| uuid::Uuid::parse_str(&id).ok())
-                .unwrap_or_else(|| uuid::Uuid::new_v4());
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
             Ok(User {
                 id: user_id,
-                email: claims.email.unwrap_or_else(|| "dev@example.com".to_string()),
+                email: claims
+                    .email
+                    .unwrap_or_else(|| "dev@example.com".to_string()),
                 display_name: claims.name.unwrap_or_else(|| "Dev User".to_string()),
                 total_points: 0,
                 total_wins: 0,
@@ -372,8 +379,7 @@ impl AuthService {
                     serde_json::from_str(token).map_err(|_| AuthError::InvalidToken)?;
 
                 Ok(User {
-                    id: uuid::Uuid::parse_str(&claims.user_id)
-                        .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                    id: claims.user_id,
                     email: claims.email,
                     display_name: claims.name,
                     total_points: 0,
@@ -386,8 +392,7 @@ impl AuthService {
                 let string_parts: Vec<&str> = token.split(':').collect();
                 if string_parts.len() >= 3 {
                     Ok(User {
-                        id: uuid::Uuid::parse_str(string_parts[0])
-                            .unwrap_or_else(|_| uuid::Uuid::new_v4()),
+                        id: string_parts[0].to_string(),
                         email: string_parts[1].to_string(),
                         display_name: string_parts[2].to_string(),
                         total_points: 0,

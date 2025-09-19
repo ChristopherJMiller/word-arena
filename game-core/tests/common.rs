@@ -1,7 +1,6 @@
 use game_core::{Game, GameEvent, GameEventHandler, GameManager, WordValidator};
-use game_types::{GamePhase, GameStatus, Player};
+use game_types::{GameId, GamePhase, GameStatus, Player, PlayerId};
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 /// Creates a test WordValidator with a known set of words
 pub fn create_test_validator() -> WordValidator {
@@ -17,7 +16,7 @@ pub fn create_test_player(name: &str) -> Player {
 /// Creates a test player with specified points
 pub fn create_test_player_with_points(name: &str, points: i32) -> Player {
     Player {
-        user_id: Uuid::new_v4(),
+        user_id: format!("test-player-{}", name.to_lowercase()),
         display_name: name.to_string(),
         points,
         guess_history: Vec::new(),
@@ -27,7 +26,7 @@ pub fn create_test_player_with_points(name: &str, points: i32) -> Player {
 
 /// Creates a game with a specific target word
 pub fn create_game_with_word(players: Vec<Player>, word: &str, threshold: i32) -> Game {
-    let game_id = Uuid::new_v4();
+    let game_id = uuid::Uuid::new_v4().to_string();
     Game::new(game_id, players, word.to_string(), threshold)
 }
 
@@ -97,8 +96,8 @@ pub fn advance_to_phase(game: &mut Game, target_phase: GamePhase) {
         GamePhase::IndividualGuess => {
             // Need to process a round first
             if let Some(player) = game.state.players.first() {
-                let player_id = player.user_id;
-                game.add_guess(player_id, "hello".to_string()).ok();
+                let player_id = player.user_id.clone();
+                game.add_guess(&player_id, "hello".to_string()).ok();
                 game.process_round().ok();
             }
         }
@@ -119,8 +118,8 @@ pub fn submit_guesses(game: &mut Game, guesses: Vec<(&str, &str)>) {
             .iter()
             .find(|p| p.display_name == player_name)
         {
-            let player_id = player.user_id;
-            game.add_guess(player_id, word.to_string()).ok();
+            let player_id = player.user_id.clone();
+            game.add_guess(&player_id, word.to_string()).ok();
         }
     }
 }

@@ -26,6 +26,7 @@ interface AuthContextType {
   user: User | null;
   accessToken: string | null;
   isAuthenticated: boolean;
+  hasMsalAuth: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: () => Promise<string | null>;
@@ -45,38 +46,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasMsalAuth, setHasMsalAuth] = useState(false);
+  
+  // Set up WebSocket auth success handler
+  useEffect(() => {
+    const wsService = getWebSocketService();
+    wsService.setAuthSuccessHandler((wsUser: any) => {
+      console.log("WebSocket authentication success, setting user:", wsUser);
+      setUser(wsUser);
+      setIsAuthenticated(true);
+    });
+  }, []);
   const [sessionConflict, setSessionConflict] = useState<{
     isOpen: boolean;
     onForceLogin?: () => void;
     message?: string;
   }>({ isOpen: false });
   const isDevMode = import.meta.env.VITE_AUTH_DEV_MODE === "true";
-  
-  // Get WebSocket service instance
-  const wsService = getWebSocketService();
-
-  // Monitor WebSocket authentication and sync user data
-  useEffect(() => {
-    const checkWSUser = () => {
-      if (wsService.authenticated && wsService.user) {
-        // Use clean user data from backend
-        setUser(wsService.user);
-        setIsAuthenticated(true);
-        console.log("Updated user from WebSocket:", wsService.user);
-      } else if (!wsService.authenticated && wsService.isConnected) {
-        // WebSocket connected but not authenticated, clear user data
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-    };
-
-    // Check immediately
-    checkWSUser();
-
-    // Set up interval to check for changes
-    const interval = setInterval(checkWSUser, 1000);
-    return () => clearInterval(interval);
-  }, [wsService]);
 
   // Create a mock JWT token for development
   const createMockJWT = (
@@ -230,10 +216,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const token = tokenResponse.accessToken;
       setAccessToken(token);
-      
-      // Don't set user data here - let the WebSocket authentication handle it
-      // This ensures we use the clean user ID from the backend
-      console.log("MSAL authentication complete, WebSocket will handle user data");
+
+      // Set the temporary authentication flag so WebSocket hook can proceed
+      setHasMsalAuth(true);
+      console.log("MSAL authentication complete, WebSocket will provide user data");
     } catch (error) {
       console.error("Failed to acquire token:", error);
       setIsAuthenticated(false);
@@ -334,6 +320,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     accessToken,
     isAuthenticated,
+    hasMsalAuth,
     login,
     logout,
     getAccessToken,

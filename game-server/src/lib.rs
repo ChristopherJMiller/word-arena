@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use std::sync::Arc;
-use uuid::Uuid;
 use warp::Filter;
 
 use crate::auth::AuthService;
@@ -121,18 +120,7 @@ async fn handle_game_state_request(
     game_manager: Arc<GameManager>,
     auth_service: Arc<AuthService>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Parse game ID as UUID
-    let _game_uuid = match Uuid::parse_str(&game_id) {
-        Ok(uuid) => uuid,
-        Err(_) => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&serde_json::json!({
-                    "error": "Invalid game ID format"
-                })),
-                warp::http::StatusCode::BAD_REQUEST,
-            ));
-        }
-    };
+    // Game ID is now a string, no parsing needed
 
     // Check authentication if provided
     if let Some(auth_header) = auth_header {
@@ -205,18 +193,7 @@ async fn handle_user_stats_request(
     user_repository: Arc<UserRepository>,
     auth_service: Arc<AuthService>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    // Parse user ID as UUID
-    let user_uuid = match Uuid::parse_str(&user_id) {
-        Ok(uuid) => uuid,
-        Err(_) => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&serde_json::json!({
-                    "error": "Invalid user ID format"
-                })),
-                warp::http::StatusCode::BAD_REQUEST,
-            ));
-        }
-    };
+    // User ID is now a string, no parsing needed
 
     // Check authentication if provided - user can only view their own stats unless admin
     if let Some(auth_header) = auth_header {
@@ -225,7 +202,7 @@ async fn handle_user_stats_request(
         match auth_service.validate_token(token).await {
             Ok(authenticated_user) => {
                 // Only allow users to view their own stats
-                if authenticated_user.id != user_uuid {
+                if authenticated_user.id != user_id {
                     return Ok(warp::reply::with_status(
                         warp::reply::json(&serde_json::json!({
                             "error": "Not authorized to view this user's stats"
@@ -254,9 +231,9 @@ async fn handle_user_stats_request(
     }
 
     // Get user and their rank
-    match user_repository.find_by_id(user_uuid).await {
+    match user_repository.find_by_id(&user_id).await {
         Ok(Some(user)) => {
-            let rank = match user_repository.get_user_rank(user_uuid).await {
+            let rank = match user_repository.get_user_rank(&user_id).await {
                 Ok(rank) => rank,
                 Err(err) => {
                     tracing::error!("Failed to get user rank: {}", err);
@@ -807,7 +784,7 @@ mod integration_tests {
             .expect("WebSocket handshake should succeed");
 
         // Authenticate with JSON token
-        let json_token = r#"{"user_id":"550e8400-e29b-41d4-a716-446655440000","email":"bob@example.com","name":"Bob"}"#;
+        let json_token = r#"{"user_id":"test-bob-id","email":"bob@example.com","name":"Bob"}"#;
         let auth_msg = ClientMessage::Authenticate {
             token: json_token.to_string(),
         };
@@ -823,7 +800,7 @@ mod integration_tests {
             if let ServerMessage::AuthenticationSuccess { user } = server_msg {
                 assert_eq!(user.email, "bob@example.com");
                 assert_eq!(user.display_name, "Bob");
-                assert_eq!(user.id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+                assert_eq!(user.id, "test-bob-id");
             } else {
                 panic!("Expected AuthenticationSuccess, got: {:?}", server_msg);
             }
@@ -1060,7 +1037,7 @@ mod integration_tests {
         // Since we can't easily extract it from the app, we'll use HTTP requests to create users
         let users = vec![
             User {
-                id: uuid::Uuid::new_v4(),
+                id: "test-alice".to_string(),
                 email: "alice@test.com".to_string(),
                 display_name: "Alice".to_string(),
                 total_points: 100,
@@ -1069,7 +1046,7 @@ mod integration_tests {
                 created_at: chrono::Utc::now().to_rfc3339(),
             },
             User {
-                id: uuid::Uuid::new_v4(),
+                id: "test-bob".to_string(),
                 email: "bob@test.com".to_string(),
                 display_name: "Bob".to_string(),
                 total_points: 200,
@@ -1078,7 +1055,7 @@ mod integration_tests {
                 created_at: chrono::Utc::now().to_rfc3339(),
             },
             User {
-                id: uuid::Uuid::new_v4(),
+                id: "test-charlie".to_string(),
                 email: "charlie@test.com".to_string(),
                 display_name: "Charlie".to_string(),
                 total_points: 50,
@@ -1157,7 +1134,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_user_stats_endpoint_unauthorized() {
         let app = create_dev_test_app().await;
-        let user_id = uuid::Uuid::new_v4();
+        let user_id = "test-user-id";
 
         let response = warp::test::request()
             .method("GET")
@@ -1179,24 +1156,24 @@ mod integration_tests {
 
         let response = warp::test::request()
             .method("GET")
-            .path("/api/user/invalid-uuid/stats")
-            .header("authorization", "user1:test@example.com:Test")
+            .path("/api/user/nonexistent-user-id/stats")
+            .header("authorization", "nonexistent-user-id:test@example.com:Test")
             .reply(&app)
             .await;
 
-        assert_eq!(response.status(), 400);
+        assert_eq!(response.status(), 404);
 
         let error: serde_json::Value =
             serde_json::from_slice(response.body()).expect("Should parse JSON");
 
-        assert_eq!(error["error"], "Invalid user ID format");
+        assert_eq!(error["error"], "User not found");
     }
 
     #[tokio::test]
     async fn test_user_stats_endpoint_forbidden() {
         let app = create_dev_test_app().await;
-        let user_id = uuid::Uuid::new_v4();
-        let different_user_id = uuid::Uuid::new_v4();
+        let user_id = "test-user-1";
+        let different_user_id = "test-user-2";
 
         // Try to access another user's stats
         let response = warp::test::request()
@@ -1220,7 +1197,7 @@ mod integration_tests {
     #[tokio::test]
     async fn test_user_stats_endpoint_user_not_found() {
         let app = create_dev_test_app().await;
-        let user_id = uuid::Uuid::new_v4();
+        let user_id = "nonexistent-user";
 
         // Request own stats for a user that doesn't exist in DB
         let response = warp::test::request()
