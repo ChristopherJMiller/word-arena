@@ -137,6 +137,10 @@ impl AuthService {
         if let Some(ref oid) = claims.oid {
             tracing::debug!("User oid: {}", oid);
         }
+        if let Some(ref sub) = claims.sub {
+            tracing::debug!("User sub: {}", sub);
+        }
+        tracing::debug!("All available claims: {:?}", claims);
 
         // Manual issuer validation for common tenant
         if is_common_tenant {
@@ -162,10 +166,26 @@ impl AuthService {
 
         // Create user from claims
         // Use oid (object ID) if available, fallback to sub, then generate new UUID
-        let user_id = claims.oid
-            .or(claims.sub)
-            .and_then(|id| uuid::Uuid::parse_str(&id).ok())
-            .unwrap_or_else(|| uuid::Uuid::new_v4());
+        let raw_user_id = claims.oid.or(claims.sub);
+        let user_id = if let Some(id_str) = raw_user_id {
+            // Handle Microsoft's common tenant format: user-id.tenant-id
+            // Extract just the user part before the dot
+            let clean_id = if id_str.contains('.') {
+                let parts: Vec<&str> = id_str.split('.').collect();
+                tracing::debug!("Detected compound user ID: {}, extracting user part: {}", id_str, parts[0]);
+                parts[0]
+            } else {
+                &id_str
+            };
+            
+            uuid::Uuid::parse_str(clean_id).unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse user ID '{}': {}. Generating new UUID.", clean_id, e);
+                uuid::Uuid::new_v4()
+            })
+        } else {
+            tracing::debug!("No oid or sub found in claims, generating new UUID");
+            uuid::Uuid::new_v4()
+        };
 
         Ok(User {
             id: user_id,
