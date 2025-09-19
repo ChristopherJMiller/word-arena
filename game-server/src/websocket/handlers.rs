@@ -41,6 +41,7 @@ impl MessageHandler {
 
         match message {
             ClientMessage::Authenticate { token } => self.handle_authenticate(token).await,
+            ClientMessage::ForceAuthenticate { token } => self.handle_force_authenticate(token).await,
             ClientMessage::JoinQueue => self.handle_join_queue().await,
             ClientMessage::LeaveQueue => self.handle_leave_queue().await,
             ClientMessage::VoteStartGame => self.handle_vote_start_game().await,
@@ -93,6 +94,14 @@ impl MessageHandler {
 
         match self.auth_service.validate_token(&token).await {
             Ok(user) => {
+                // Check if user already has an active session
+                if self.connection_manager.check_existing_session(&user.id.to_string()).await {
+                    // Send session conflict message
+                    return self.send_message(ServerMessage::SessionConflict {
+                        existing_connection: "You already have an active session in another browser.".to_string(),
+                    }).await;
+                }
+                
                 // Set user in connection
                 self.connection_manager
                     .set_connection_user(self.connection_id, Some(user.clone()))
@@ -103,6 +112,47 @@ impl MessageHandler {
             Err(e) => {
                 warn!(
                     "Authentication failed for connection {}: {}",
+                    self.connection_id, e
+                );
+                self.send_message(ServerMessage::AuthenticationFailed {
+                    reason: e.to_string(),
+                })
+                .await
+            }
+        }
+    }
+
+    async fn handle_force_authenticate(&self, token: String) -> Result<(), String> {
+        info!("Force authenticating connection {}", self.connection_id);
+
+        match self.auth_service.validate_token(&token).await {
+            Ok(user) => {
+                // Force disconnect existing session and authenticate this one
+                match self.connection_manager
+                    .force_authenticate_connection(self.connection_id, user.id.to_string())
+                    .await {
+                    Ok(old_conn) => {
+                        if old_conn.is_some() {
+                            info!("Disconnected existing session for user {}", user.id);
+                        }
+                        // Set user in connection
+                        self.connection_manager
+                            .set_connection_user(self.connection_id, Some(user.clone()))
+                            .await;
+                        self.send_message(ServerMessage::AuthenticationSuccess { user })
+                            .await
+                    }
+                    Err(e) => {
+                        self.send_message(ServerMessage::AuthenticationFailed {
+                            reason: e.to_string(),
+                        })
+                        .await
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(
+                    "Force authentication failed for connection {}: {}",
                     self.connection_id, e
                 );
                 self.send_message(ServerMessage::AuthenticationFailed {

@@ -4,7 +4,7 @@ import { getWebSocketService } from "../services/websocketService";
 import { ServerMessage } from "../types/generated";
 
 export function useWebSocket() {
-  const { isAuthenticated, getAccessToken } = useAuth();
+  const { isAuthenticated, getAccessToken, handleSessionConflict } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [isWSAuthenticated, setIsWSAuthenticated] = useState(false);
   const wsService = useRef(getWebSocketService());
@@ -34,6 +34,16 @@ export function useWebSocket() {
     return () => clearInterval(interval);
   }, [isConnected, isWSAuthenticated]);
 
+  // Set up handler for session disconnection
+  useEffect(() => {
+    wsService.current.setSessionDisconnectedHandler(() => {
+      setIsWSAuthenticated(false);
+      setIsConnected(false);
+      // Show an alert to the user
+      alert("Your session has been taken over by another login. This window will now be disconnected.");
+    });
+  }, []);
+
   useEffect(() => {
     const connectAndAuthenticate = async () => {
       try {
@@ -47,11 +57,20 @@ export function useWebSocket() {
         if (isAuthenticated && !isWSAuthenticated) {
           const token = await getAccessToken();
           if (token) {
-            const authSuccess = await wsService.current.authenticate(token);
-            setIsWSAuthenticated(authSuccess);
-
-            if (!authSuccess) {
+            const authResult = await wsService.current.authenticate(token, false);
+            
+            if (authResult === 'conflict') {
+              // Handle session conflict
+              handleSessionConflict(async () => {
+                // Force authenticate on retry
+                const forceAuthResult = await wsService.current.authenticate(token, true);
+                setIsWSAuthenticated(forceAuthResult === true);
+              }, "You already have an active session in another browser.");
+            } else if (authResult === true) {
+              setIsWSAuthenticated(true);
+            } else {
               console.error("WebSocket authentication failed");
+              setIsWSAuthenticated(false);
             }
           }
         }

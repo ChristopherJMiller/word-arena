@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { PublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
 import { User } from "../../types/generated/User";
+import { SessionConflictModal } from "./SessionConflictModal";
 
 // MSAL configuration
 const msalConfig = {
@@ -29,6 +30,8 @@ interface AuthContextType {
   getAccessToken: () => Promise<string | null>;
   devLogin?: (displayName: string, email?: string) => void;
   isDevMode: boolean;
+  handleSessionConflict: (onForceLogin: () => void) => void;
+  clearSessionConflict: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -41,6 +44,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [sessionConflict, setSessionConflict] = useState<{
+    isOpen: boolean;
+    onForceLogin?: () => void;
+    message?: string;
+  }>({ isOpen: false });
   const isDevMode = import.meta.env.VITE_AUTH_DEV_MODE === "true";
 
   // Create a mock JWT token for development
@@ -280,6 +288,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  const handleSessionConflict = useCallback((onForceLogin: () => void, message?: string) => {
+    setSessionConflict({
+      isOpen: true,
+      onForceLogin,
+      message,
+    });
+  }, []);
+
+  const clearSessionConflict = useCallback(() => {
+    setSessionConflict({ isOpen: false });
+  }, []);
+
+  const handleForceLogin = () => {
+    if (sessionConflict.onForceLogin) {
+      sessionConflict.onForceLogin();
+    }
+    clearSessionConflict();
+  };
+
+  const handleCancelLogin = () => {
+    clearSessionConflict();
+    // Optionally close the window or redirect
+    // window.close(); // Uncomment if you want to close the window
+  };
+
   const contextValue: AuthContextType = {
     user,
     accessToken,
@@ -289,12 +322,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     getAccessToken,
     devLogin: isDevMode ? devLogin : undefined,
     isDevMode,
+    handleSessionConflict,
+    clearSessionConflict,
   };
 
   return (
     <MsalProvider instance={msalInstance}>
       <AuthContext.Provider value={contextValue}>
         {children}
+        <SessionConflictModal
+          isOpen={sessionConflict.isOpen}
+          onForceLogin={handleForceLogin}
+          onCancel={handleCancelLogin}
+          message={sessionConflict.message}
+        />
       </AuthContext.Provider>
     </MsalProvider>
   );

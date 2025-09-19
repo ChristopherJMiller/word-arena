@@ -171,6 +171,54 @@ impl ConnectionManager {
         Ok(())
     }
 
+    pub async fn force_authenticate_connection(
+        &self,
+        id: ConnectionId,
+        user_id: String,
+    ) -> Result<Option<ConnectionId>, String> {
+        // Check if user is already connected and get the old connection
+        let old_connection_id = {
+            let user_to_connection = self.user_to_connection.read().await;
+            user_to_connection.get(&user_id).copied()
+        };
+
+        // If there's an existing connection, disconnect it
+        if let Some(old_conn_id) = old_connection_id {
+            // Send disconnection message to old connection
+            let _ = self.send_to_connection(
+                old_conn_id,
+                ServerMessage::SessionDisconnected {
+                    reason: "Your session has been taken over by another login.".to_string(),
+                },
+            ).await;
+            
+            // Remove the old connection
+            self.remove_connection(old_conn_id).await;
+        }
+
+        // Now authenticate the new connection
+        {
+            let mut connections = self.connections.write().await;
+            if let Some(connection) = connections.get_mut(&id) {
+                connection.set_authenticated(user_id.clone());
+            } else {
+                return Err("Connection not found".to_string());
+            }
+        }
+
+        {
+            let mut user_to_connection = self.user_to_connection.write().await;
+            user_to_connection.insert(user_id, id);
+        }
+
+        Ok(old_connection_id)
+    }
+
+    pub async fn check_existing_session(&self, user_id: &str) -> bool {
+        let user_to_connection = self.user_to_connection.read().await;
+        user_to_connection.contains_key(user_id)
+    }
+
     pub async fn update_activity(&self, id: ConnectionId) {
         let mut connections = self.connections.write().await;
         if let Some(connection) = connections.get_mut(&id) {

@@ -7,9 +7,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use sha2::{Sha256, Digest};
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 use game_types::User;
 

@@ -8,6 +8,7 @@ use crate::{GamePhase, GameState, GuessResult, PersonalGuess, Player};
 #[ts(export)]
 pub enum ClientMessage {
     Authenticate { token: String },
+    ForceAuthenticate { token: String }, // Force disconnect existing session
     JoinQueue,
     LeaveQueue,
     VoteStartGame,
@@ -25,6 +26,9 @@ pub enum ServerMessage {
     },
     AuthenticationFailed {
         reason: String,
+    },
+    SessionConflict {
+        existing_connection: String, // Description of existing session
     },
     QueueJoined {
         position: u32,
@@ -61,6 +65,9 @@ pub enum ServerMessage {
     },
     PlayerReconnected {
         player_id: Uuid,
+    },
+    SessionDisconnected {
+        reason: String,
     },
     Error {
         message: String,

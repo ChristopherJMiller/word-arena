@@ -10,6 +10,7 @@ export class WebSocketService {
   private reconnectInterval = 1000;
   private isAuthenticated = false;
   private authToken: string | null = null;
+  private sessionDisconnectedHandler?: () => void;
 
   constructor(private url: string) {}
 
@@ -58,7 +59,7 @@ export class WebSocketService {
     this.authToken = null;
   }
 
-  async authenticate(token: string): Promise<boolean> {
+  async authenticate(token: string, forceAuth: boolean = false): Promise<boolean | 'conflict'> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket not connected");
     }
@@ -81,12 +82,20 @@ export class WebSocketService {
               message.AuthenticationFailed.reason,
             );
             resolve(false);
+          } else if ("SessionConflict" in message) {
+            this.removeMessageHandler(authHandler);
+            resolve('conflict');
           }
         }
       };
 
       this.addMessageHandler(authHandler);
-      this.sendMessage({ Authenticate: { token } });
+      
+      if (forceAuth) {
+        this.sendMessage({ ForceAuthenticate: { token } });
+      } else {
+        this.sendMessage({ Authenticate: { token } });
+      }
 
       // Timeout after 10 seconds
       setTimeout(() => {
@@ -121,6 +130,18 @@ export class WebSocketService {
     // Log incoming server messages for easier debugging
     console.log("[WebSocket] Received server message:", JSON.stringify(message, null, 2));
     
+    // Handle SessionDisconnected specially
+    if (typeof message === "object" && message !== null && "SessionDisconnected" in message) {
+      console.warn("Session disconnected:", message.SessionDisconnected.reason);
+      this.isAuthenticated = false;
+      if (this.sessionDisconnectedHandler) {
+        this.sessionDisconnectedHandler();
+      }
+      // Disconnect the WebSocket to prevent reconnection attempts
+      this.disconnect();
+      return;
+    }
+    
     this.messageHandlers.forEach((handler) => {
       try {
         handler(message);
@@ -128,6 +149,10 @@ export class WebSocketService {
         console.error("Error in message handler:", error);
       }
     });
+  }
+
+  setSessionDisconnectedHandler(handler: () => void) {
+    this.sessionDisconnectedHandler = handler;
   }
 
   private async handleReconnection() {
