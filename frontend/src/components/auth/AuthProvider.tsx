@@ -3,7 +3,6 @@ import { PublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
 import { User } from "../../types/generated/User";
 import { SessionConflictModal } from "./SessionConflictModal";
-import { getWebSocketService } from "../../services/websocketService";
 
 // MSAL configuration
 const msalConfig = {
@@ -47,16 +46,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasMsalAuth, setHasMsalAuth] = useState(false);
-  
-  // Set up WebSocket auth success handler
-  useEffect(() => {
-    const wsService = getWebSocketService();
-    wsService.setAuthSuccessHandler((wsUser: any) => {
-      console.log("WebSocket authentication success, setting user:", wsUser);
-      setUser(wsUser);
-      setIsAuthenticated(true);
-    });
-  }, []);
   const [sessionConflict, setSessionConflict] = useState<{
     isOpen: boolean;
     onForceLogin?: () => void;
@@ -217,9 +206,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const token = tokenResponse.accessToken;
       setAccessToken(token);
 
-      // Set the temporary authentication flag so WebSocket hook can proceed
+      // Create user object from account info
+      const userInfo: User = {
+        id: account.homeAccountId,
+        email: account.username,
+        display_name: account.name || account.username,
+        total_points: 0,
+        total_wins: 0,
+        total_games: 0,
+        created_at: new Date().toISOString(),
+      };
+
+      setUser(userInfo);
+      setIsAuthenticated(true);
       setHasMsalAuth(true);
-      console.log("MSAL authentication complete, WebSocket will provide user data");
     } catch (error) {
       console.error("Failed to acquire token:", error);
       setIsAuthenticated(false);

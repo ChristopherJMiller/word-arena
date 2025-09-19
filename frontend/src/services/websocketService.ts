@@ -11,8 +11,6 @@ export class WebSocketService {
   private isAuthenticated = false;
   private authToken: string | null = null;
   private sessionDisconnectedHandler?: () => void;
-  private authenticatedUser: any = null;
-  private authSuccessHandler?: (user: any) => void;
 
   constructor(private url: string) {}
 
@@ -59,7 +57,6 @@ export class WebSocketService {
     }
     this.isAuthenticated = false;
     this.authToken = null;
-    this.authenticatedUser = null;
   }
 
   async authenticate(token: string, forceAuth: boolean = false): Promise<boolean | 'conflict'> {
@@ -75,15 +72,10 @@ export class WebSocketService {
         if (typeof message === "object" && message !== null) {
           if ("AuthenticationSuccess" in message) {
             this.isAuthenticated = true;
-            this.authenticatedUser = message.AuthenticationSuccess.user;
-            if (this.authSuccessHandler) {
-              this.authSuccessHandler(message.AuthenticationSuccess.user);
-            }
             this.removeMessageHandler(authHandler);
             resolve(true);
           } else if ("AuthenticationFailed" in message) {
             this.isAuthenticated = false;
-            this.authenticatedUser = null;
             this.removeMessageHandler(authHandler);
             console.error(
               "Authentication failed:",
@@ -163,9 +155,6 @@ export class WebSocketService {
     this.sessionDisconnectedHandler = handler;
   }
 
-  setAuthSuccessHandler(handler: (user: any) => void) {
-    this.authSuccessHandler = handler;
-  }
 
   private async handleReconnection() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
@@ -201,9 +190,6 @@ export class WebSocketService {
     return this.isAuthenticated;
   }
 
-  get user(): any {
-    return this.authenticatedUser;
-  }
 }
 
 // Singleton instance
