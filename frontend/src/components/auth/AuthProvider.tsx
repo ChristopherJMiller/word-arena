@@ -30,7 +30,7 @@ interface AuthContextType {
   getAccessToken: () => Promise<string | null>;
   devLogin?: (displayName: string, email?: string) => void;
   isDevMode: boolean;
-  handleSessionConflict: (onForceLogin: () => void) => void;
+  handleSessionConflict: (onForceLogin: () => void, message?: string) => void;
   clearSessionConflict: () => void;
 }
 
