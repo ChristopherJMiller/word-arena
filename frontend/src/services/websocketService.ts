@@ -11,6 +11,7 @@ export class WebSocketService {
   private isAuthenticated = false;
   private authToken: string | null = null;
   private sessionDisconnectedHandler?: () => void;
+  private authenticatedUser: any = null;
 
   constructor(private url: string) {}
 
@@ -57,6 +58,7 @@ export class WebSocketService {
     }
     this.isAuthenticated = false;
     this.authToken = null;
+    this.authenticatedUser = null;
   }
 
   async authenticate(token: string, forceAuth: boolean = false): Promise<boolean | 'conflict'> {
@@ -72,10 +74,12 @@ export class WebSocketService {
         if (typeof message === "object" && message !== null) {
           if ("AuthenticationSuccess" in message) {
             this.isAuthenticated = true;
+            this.authenticatedUser = message.AuthenticationSuccess.user;
             this.removeMessageHandler(authHandler);
             resolve(true);
           } else if ("AuthenticationFailed" in message) {
             this.isAuthenticated = false;
+            this.authenticatedUser = null;
             this.removeMessageHandler(authHandler);
             console.error(
               "Authentication failed:",
@@ -187,6 +191,10 @@ export class WebSocketService {
 
   get authenticated(): boolean {
     return this.isAuthenticated;
+  }
+
+  get user(): any {
+    return this.authenticatedUser;
   }
 }
 

@@ -111,6 +111,7 @@ export function useWebSocket() {
   return {
     isConnected,
     isAuthenticated: isWSAuthenticated,
+    user: wsService.current.user,
     sendMessage,
     addMessageHandler,
     removeMessageHandler,

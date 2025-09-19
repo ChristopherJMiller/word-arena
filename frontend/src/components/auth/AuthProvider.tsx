@@ -3,6 +3,7 @@ import { PublicClientApplication, AccountInfo } from "@azure/msal-browser";
 import { MsalProvider } from "@azure/msal-react";
 import { User } from "../../types/generated/User";
 import { SessionConflictModal } from "./SessionConflictModal";
+import { getWebSocketService } from "../../services/websocketService";
 
 // MSAL configuration
 const msalConfig = {
@@ -50,6 +51,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     message?: string;
   }>({ isOpen: false });
   const isDevMode = import.meta.env.VITE_AUTH_DEV_MODE === "true";
+  
+  // Get WebSocket service instance
+  const wsService = getWebSocketService();
+
+  // Monitor WebSocket authentication and sync user data
+  useEffect(() => {
+    const checkWSUser = () => {
+      if (wsService.authenticated && wsService.user) {
+        // Use clean user data from backend
+        setUser(wsService.user);
+        setIsAuthenticated(true);
+        console.log("Updated user from WebSocket:", wsService.user);
+      } else if (!wsService.authenticated && wsService.isConnected) {
+        // WebSocket connected but not authenticated, clear user data
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    };
+
+    // Check immediately
+    checkWSUser();
+
+    // Set up interval to check for changes
+    const interval = setInterval(checkWSUser, 1000);
+    return () => clearInterval(interval);
+  }, [wsService]);
 
   // Create a mock JWT token for development
   const createMockJWT = (
@@ -203,20 +230,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const token = tokenResponse.accessToken;
       setAccessToken(token);
-
-      // Create user object from account info
-      const userInfo: User = {
-        id: account.homeAccountId,
-        email: account.username,
-        display_name: account.name || account.username,
-        total_points: 0,
-        total_wins: 0,
-        total_games: 0,
-        created_at: new Date().toISOString(),
-      };
-
-      setUser(userInfo);
-      setIsAuthenticated(true);
+      
+      // Don't set user data here - let the WebSocket authentication handle it
+      // This ensures we use the clean user ID from the backend
+      console.log("MSAL authentication complete, WebSocket will handle user data");
     } catch (error) {
       console.error("Failed to acquire token:", error);
       setIsAuthenticated(false);
