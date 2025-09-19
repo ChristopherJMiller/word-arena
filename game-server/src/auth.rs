@@ -165,13 +165,31 @@ impl AuthService {
         }
 
         // Create user from claims
-        // Use the full compound ID (oid or sub) for cross-tenant consistency
-        let user_id = claims.oid.or(claims.sub).unwrap_or_else(|| {
+        // Extract tenant ID from issuer to create compound ID like MSAL homeAccountId
+        let base_user_id = claims.oid.or(claims.sub).unwrap_or_else(|| {
             tracing::debug!("No oid or sub found in claims, generating new ID");
             uuid::Uuid::new_v4().to_string()
         });
 
-        tracing::debug!("Using user ID: {}", user_id);
+        // Extract tenant ID from issuer URL to match MSAL homeAccountId format
+        let tenant_id = if let Some(captures) = regex::Regex::new(r"https://[^/]+/([^/]+)/?")
+            .unwrap()
+            .captures(&claims.iss) {
+            captures.get(1).map(|m| m.as_str().to_string())
+        } else {
+            None
+        };
+
+        // Create compound ID format: user_id.tenant_id (like MSAL homeAccountId)
+        let user_id = if let Some(ref tid) = tenant_id {
+            format!("{}.{}", base_user_id, tid)
+        } else {
+            // Fallback to just user ID if we can't extract tenant
+            base_user_id.clone()
+        };
+
+        tracing::debug!("Using compound user ID: {} (base: {}, tenant: {:?})", 
+                       user_id, base_user_id, tenant_id);
 
         Ok(User {
             id: user_id,
@@ -348,10 +366,13 @@ impl AuthService {
 
             // Create user from claims (no validation in dev mode)
             // Use oid (object ID) if available, fallback to sub, then generate new UUID
-            let user_id = claims
+            let base_user_id = claims
                 .oid
                 .or(claims.sub)
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+            // In dev mode, create a compound ID format for consistency
+            let user_id = format!("{}.dev-tenant", base_user_id);
 
             Ok(User {
                 id: user_id,
